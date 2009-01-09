@@ -1,0 +1,42 @@
+=============================================================================
+
+  UDPTUNNEL README
+
+  Author: Daniel Meekins
+  Contact: dmeekins - gmail
+
+  Copyright (C) Daniel Meekins
+
+=============================================================================
+
+This project tunnels TCP data through a UDP tunnel. There are two executables:
+udpserver and udpclient. The server acts as a proxy for the client, listening
+on a specified UDP port and creating a connection to a TCP server that the
+client specifies. The client listens on a TCP port, acting as the server that
+some TCP client connects to. The client recevies any TCP data on that port and
+sends the data to the udpserver, which sends it to the TCP connection it made
+with the desired TCP server.
+
+To run the udpserver:
+    udpserver [listen port]
+where "listen port" is a UDP port to listen for messages from the udpclient.
+Example: 
+    udpserver 4444
+
+To run the udpclient:
+    udpclient [local host] <local port> <proxy host> <proxy port>
+            <remote host> <remote port>
+local host/port - Host and port for the TCP server to listen on. If the host
+                  isn't supplied, it will listen on all available addresses.
+proxy host/port - Host and port that udpserver is listening on.
+remote host/port - Host and port to forward the received TCP data to. The host
+                   is relative to the proxy machine (e.g. specifiying 127.0.0.1
+                   is the proxy machine itself).
+Example for tunneling ssh data through the tunnel:
+    udpclient 127.0.0.1 3333 192.168.1.1 4444 192.168.1.2 22
+Assuming udpserver is running on 192.168.1.1:4444, "ssh -p 3333 localhost" will
+connect you to the ssh server on 192.168.1.2 using the UDP tunnel through
+192.168.1.1.
+
+This code has been tested and works on Linux, Solaris 10 x86, and Cygwin (but
+requires the IPv6 extension - http://win6.jp/Cygwin/index.html).

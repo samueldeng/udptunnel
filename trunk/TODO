@@ -1,0 +1,16 @@
+=============================================================================
+
+  UDPTUNNEL TODO
+
+  Author: Daniel Meekins
+  Contact: dmeekins - gmail
+
+  Copyright (C) Daniel Meekins
+
+=============================================================================
+
+- Implement timeout and resending for new connections from the udpclient.
+- Allow to run using IPv6.
+- Comment parts of the code more.
+- Clean up the README file.
+- Do the stuff listed here.
