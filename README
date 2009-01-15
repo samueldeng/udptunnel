@@ -5,7 +5,7 @@
   Author: Daniel Meekins
   Contact: dmeekins - gmail
 
-  Copyright (C) Daniel Meekins
+  Copyright (C) 2009 Daniel Meekins
 
 =============================================================================
 
@@ -17,14 +17,17 @@ some TCP client connects to. The client recevies any TCP data on that port and
 sends the data to the udpserver, which sends it to the TCP connection it made
 with the desired TCP server.
 
+
 To run the udpserver:
-    udpserver [listen port]
+    udpserver [-6] [listen port]
 where "listen port" is a UDP port to listen for messages from the udpclient.
+Use the -6 option to listen on IPv6 addresses.
 Example: 
     udpserver 4444
 
+
 To run the udpclient:
-    udpclient [local host] <local port> <proxy host> <proxy port>
+    udpclient [-6] [local host] <local port> <proxy host> <proxy port>
             <remote host> <remote port>
 local host/port - Host and port for the TCP server to listen on. If the host
                   isn't supplied, it will listen on all available addresses.
@@ -32,6 +35,8 @@ proxy host/port - Host and port that udpserver is listening on.
 remote host/port - Host and port to forward the received TCP data to. The host
                    is relative to the proxy machine (e.g. specifiying 127.0.0.1
                    is the proxy machine itself).
+Use the -6 option to listen and connect using IPv6 addresses.
+
 Example for tunneling ssh data through the tunnel:
     udpclient 127.0.0.1 3333 192.168.1.1 4444 192.168.1.2 22
 Assuming udpserver is running on 192.168.1.1:4444, "ssh -p 3333 localhost" will

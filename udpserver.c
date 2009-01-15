@@ -20,6 +20,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
@@ -33,6 +34,7 @@
 
 static int running = 1;
 static int next_client_id = 1;
+static int ipver = SOCK_IPV4;
 
 /* internal functions */
 int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
@@ -49,7 +51,7 @@ int main(int argc, char *argv[])
 {
     char host_str[ADDRSTRLEN];
     char port_str[ADDRSTRLEN];
-
+    
     list_t *clients = NULL;
     socket_t *udp_sock = NULL;
     socket_t *udp_from = NULL;
@@ -71,27 +73,40 @@ int main(int argc, char *argv[])
     int i;
     int ret;
     
-    if(argc != 2 && argc != 3)
-    {
-        usage(argv[0]);
-        return 1;
-    }
-
     signal(SIGINT, &signal_handler);
 
-    /* Get the port and address to listen on from command line */
-    if(argc == 2)
+    while((ret = getopt(argc, argv, "6")) != -1)
     {
-        strncpy(port_str, argv[1], sizeof(port_str));
+        switch(ret)
+        {
+            case '6':
+                ipver = SOCK_IPV6;
+                break;
+
+            default:
+                usage(argv[0]);
+                exit(1);
+        }
+    }
+
+    /* Get the port and address to listen on from command line */
+    if(argc - optind == 1)
+    {
+        strncpy(port_str, argv[optind], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
         host_str[0] = 0;
     }
-    else
+    else if(argc - optind == 2)
     {
-        strncpy(host_str, argv[1], sizeof(host_str));
-        strncpy(port_str, argv[2], sizeof(port_str));
+        strncpy(host_str, argv[optind], sizeof(host_str));
+        strncpy(port_str, argv[optind+1], sizeof(port_str));
         host_str[sizeof(host_str)-1] = 0;
         port_str[sizeof(port_str)-1] = 0;
+    }
+    else
+    {
+        usage(argv[0]);
+        exit(1);
     }
 
     /* Create an empty list for the clients */
@@ -102,12 +117,12 @@ int main(int argc, char *argv[])
 
     /* Create the socket to receive UDP messages on the specified port */
     udp_sock = sock_create((host_str[0] == 0 ? NULL : host_str), port_str,
-                           AF_INET, SOCK_DGRAM, 1, 1);
+                           ipver, SOCK_TYPE_UDP, 1, 1);
     if(!udp_sock)
         goto done;
 
     /* Create empty udp socket for getting source address of udp packets */
-    udp_from = sock_create(NULL, NULL, AF_INET, SOCK_DGRAM, 0, 0);
+    udp_from = sock_create(NULL, NULL, ipver, SOCK_TYPE_UDP, 0, 0);
     if(!udp_from)
         goto done;
     
@@ -289,7 +304,7 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
             /* Create and unconnected TCP socket for the remote host, the
                client itself, add it to the list of clients */
-            tcp_sock = sock_create(data, port, SOCK_IPV4, SOCK_TYPE_TCP, 0, 0);
+            tcp_sock = sock_create(data, port, ipver, SOCK_TYPE_TCP, 0, 0);
             ERROR_GOTO(tcp_sock == NULL, "Error creating tcp socket", error);
             c = client_create(next_client_id, tcp_sock, from, 0);
             sock_free(tcp_sock);
@@ -344,7 +359,7 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
 void usage(char *prog)
 {
-    printf("usage: %s [host] port\n", prog);
+    printf("usage: %s [-6] [host] port\n", prog);
 }
 
 void signal_handler(int sig)

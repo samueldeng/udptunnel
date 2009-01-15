@@ -20,6 +20,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
@@ -32,6 +33,7 @@
 #include "list.h"
 
 static int running = 1;
+static int ipver = SOCK_IPV4;
 
 /* internal functions */
 int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
@@ -65,17 +67,32 @@ int main(int argc, char *argv[])
     int ret;
     int i;
     
-    if(argc != 6 && argc != 7)
-    {
-        usage(argv[0]);
-        return 1;
-    }
-
     signal(SIGINT, &signal_handler);
 
+    while((ret = getopt(argc, argv, "6")) != -1)
+    {
+        switch(ret)
+        {
+            case '6':
+                ipver = SOCK_IPV6;
+                break;
+
+            default:
+                usage(argv[0]);
+                exit(1);
+        }
+    }
+    
     /* Set host and port string pointers to args from the command line */
-    i = 1;
-    lhost = (argc == 6) ? NULL : argv[i++];
+    i = optind;
+
+    if(argc - i != 5 && argc - i != 6)
+    {
+        usage(argv[0]);
+        exit(1);
+    }
+    
+    lhost = (argc - i == 5) ? NULL : argv[i++];
     lport = argv[i++];
     phost = argv[i++];
     pport = argv[i++];
@@ -88,7 +105,7 @@ int main(int argc, char *argv[])
     ERROR_GOTO(clients == NULL, "Error creating clients list.", done);
 
     /* Create a TCP server socket to listen for incoming connections */
-    tcp_serv = sock_create(lhost, lport, SOCK_IPV4, SOCK_TYPE_TCP, 1, 1);
+    tcp_serv = sock_create(lhost, lport, ipver, SOCK_TYPE_TCP, 1, 1);
     ERROR_GOTO(tcp_serv == NULL, "Error creating TCP socket.", done);
 
     FD_ZERO(&client_fds);
@@ -139,7 +156,7 @@ int main(int argc, char *argv[])
         if(FD_ISSET(SOCK_FD(tcp_serv), &read_fds))
         {
             tcp_sock = sock_accept(tcp_serv);            
-            udp_sock = sock_create(phost, pport, SOCK_IPV4,
+            udp_sock = sock_create(phost, pport, ipver,
                                    SOCK_TYPE_UDP, 0, 1);
 
             client = client_create(0, tcp_sock, udp_sock, 1);
@@ -299,8 +316,8 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
 
 void usage(char *prog)
 {
-    printf("usage: %s [local host] <local port> <proxy host> <proxy port>"
-           "\n            <remote host> <remote port>\n", prog);
+    printf("usage: %s [-6] [local host] <local port> <proxy host> "
+           "<proxy port>\n            <remote host> <remote port>\n", prog);
 }
 
 void signal_handler(int sig)
