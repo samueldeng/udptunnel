@@ -5,12 +5,13 @@
   Author: Daniel Meekins
   Contact: dmeekins - gmail
 
-  Copyright (C) Daniel Meekins
+  Copyright (C) 2009 Daniel Meekins
 
 =============================================================================
 
 - Implement timeout and resending for new connections from the udpclient.
-- Allow to run using IPv6.
+- Allow to run using IPv6 and IPv4 at the same time (e.g. IPv4 on the outter
+  connections and IPv6 for the tunnel).
 - Comment parts of the code more.
 - Clean up the README file.
 - Do the stuff listed here.
