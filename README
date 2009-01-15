@@ -19,11 +19,12 @@ with the desired TCP server.
 
 
 To run the udpserver:
-    udpserver [-6] [listen port]
-where "listen port" is a UDP port to listen for messages from the udpclient.
-Use the -6 option to listen on IPv6 addresses.
-Example: 
+    udpserver [-6] [host] port
+where the port is a UDP port to listen for messages from the udpclient and host
+is the address to listen on. Use the -6 option to listen on IPv6 addresses.
+Examples: 
     udpserver 4444
+    udpserver -6 ::1 4444
 
 
 To run the udpclient:
