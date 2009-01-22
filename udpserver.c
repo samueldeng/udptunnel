@@ -155,12 +155,20 @@ int main(int argc, char *argv[])
             for(i = 0; i < LIST_LEN(clients); i++)
             {
                 client = list_get_at(clients, i);
-                ret = client_check_and_resend(client);
 
+                if(client_timed_out(client, curr_time))
+                {
+                    disconnect_and_remove_client(CLIENT_ID(client), clients,
+                                                 &client_fds);
+                    i--;
+                    continue;
+                }
+                
+                ret = client_check_and_resend(client, curr_time);
                 if(ret == -2)
                 {
-                    disconnect_and_remove_client(CLIENT_ID(client),
-                                                 clients, &client_fds);
+                    disconnect_and_remove_client(CLIENT_ID(client), clients,
+                                                 &client_fds);
                     i--;
                 }
             }
@@ -180,7 +188,7 @@ int main(int argc, char *argv[])
             
             if(ret == 0)
                 ret = handle_message(tmp_id, tmp_type, data, tmp_len,
-                                     udp_from, clients, &client_fds);            
+                                     udp_from, clients, &client_fds);
             if(ret == -2)
                 disconnect_and_remove_client(tmp_id, clients, &client_fds);
 
@@ -316,6 +324,7 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
             /* Send the Hello ACK message if created client successfully */
             client_send_helloack(c2);
+            client_reset_keepalive(c2);
             
             break;
         }
@@ -327,8 +336,9 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             client_add_tcp_fd_to_set(c, client_fds);
             break;
 
+        /* Resets the timeout of the client's keep alive time */
         case MSG_TYPE_KEEPALIVE:
-            /* TODO */
+            client_reset_keepalive(c);
             break;
 
         /* Receives the data it got from the UDP tunnel and sends it to the

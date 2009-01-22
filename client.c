@@ -52,6 +52,7 @@ client_t *client_create(uint16_t id, socket_t *tcp_sock, socket_t *udp_sock,
     c->tcp2udp_state = CLIENT_WAIT_DATA0;
     c->connected = connected;
 
+    timerclear(&c->keepalive);
     timerclear(&c->tcp2udp_timeout);
     c->resend_count = 0;
 
@@ -370,34 +371,19 @@ int client_send_goodbye(client_t *client)
 }
 
 /*
- * Returns 1 if the time has passed to wait for an ACK message from the UDP
- * tunnel, or 0 if not yet.
- */
-int client_timed_out(client_t *client)
-{
-    struct timeval curr;
-
-    gettimeofday(&curr, NULL);
-
-    if((client->tcp2udp_state == CLIENT_WAIT_ACK0 ||
-        client->tcp2udp_state == CLIENT_WAIT_ACK1)
-       && timercmp(&curr, &client->tcp2udp_timeout, >))
-        return 1;
-
-    return 0;
-}
-
-/*
  * Checks the timeout state of the client and resend the data if the timeout
  * is up.
  */
-int client_check_and_resend(client_t *client)
+int client_check_and_resend(client_t *client, struct timeval curr_tv)
 {
-    if(client_timed_out(client))
+    if((client->tcp2udp_state == CLIENT_WAIT_ACK0 ||
+        client->tcp2udp_state == CLIENT_WAIT_ACK1)
+       && timercmp(&curr_tv, &client->tcp2udp_timeout, >))
     {
         client->resend_count++;
         if(DEBUG)
             printf("resending data, count %d\n", client->resend_count);
+        
         return client_send_udp_data(client);
     }
 
@@ -407,8 +393,41 @@ int client_check_and_resend(client_t *client)
 /*
  * Sends a keepalive message to the UDP server.
  */
-int client_send_keepalive(client_t *client)
+int client_check_and_send_keepalive(client_t *client, struct timeval curr_tv)
 {
-    return msg_send_msg(client->udp_sock, client->id, MSG_TYPE_KEEPALIVE,
-                        NULL, 0);
+    if(client_timed_out(client, curr_tv))
+    {
+        curr_tv.tv_sec += KEEP_ALIVE_SECS;
+        memcpy(&client->keepalive, &curr_tv, sizeof(struct timeval));
+
+        return msg_send_msg(client->udp_sock, client->id, MSG_TYPE_KEEPALIVE,
+                            NULL, 0);
+    }
+
+    return 0;
+}
+
+/*
+ * Sets the client's keepalive timeout to be the current time plus the timeout
+ * period.
+ */
+void client_reset_keepalive(client_t *client)
+{
+    struct timeval curr;
+
+    gettimeofday(&curr, NULL);
+    curr.tv_sec += KEEP_ALIVE_TIMEOUT_SECS;
+    memcpy(&client->keepalive, &curr, sizeof(struct timeval));
+}
+
+/*
+ * Returns 1 if the client timed out (didn't get any data or keep alive
+ * messages in the period), or 0 if it hasn't yet.
+ */
+int client_timed_out(client_t *client, struct timeval curr_tv)
+{
+    if(timercmp(&curr_tv, &client->keepalive, >))
+        return 1;
+    else
+        return 0;
 }

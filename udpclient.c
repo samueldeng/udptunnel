@@ -110,6 +110,7 @@ int main(int argc, char *argv[])
 
     FD_ZERO(&client_fds);
 
+    /* Initialize all the timers */
     timerclear(&timeout);
     check_interval.tv_sec = 0;
     check_interval.tv_usec = 500000;
@@ -136,7 +137,17 @@ int main(int argc, char *argv[])
             for(i = 0; i < LIST_LEN(clients); i++)
             {
                 client = list_get_at(clients, i);
-                ret = client_check_and_resend(client);
+
+                ret = client_check_and_resend(client, curr_time);
+                if(ret == -2)
+                {
+                    disconnect_and_remove_client(CLIENT_ID(client), clients,
+                                                 &client_fds);
+                    i--;
+                    continue;
+                }
+
+                ret = client_check_and_send_keepalive(client, curr_time);
                 if(ret == -2)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
