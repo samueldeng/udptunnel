@@ -42,6 +42,7 @@ typedef struct client
     socket_t *tcp_sock; /* Socket for connection to TCP server */
     socket_t *udp_sock; /* Socket to hold address from UDP client */
     int connected;
+    struct timeval keepalive;
 
     /* For data going from UDP tunnel to TCP connection */
     char udp2tcp[MSG_MAX_LEN];
@@ -78,9 +79,10 @@ int client_send_hello(client_t *client, char *host, char *port);
 int client_send_helloack(client_t *client);
 int client_got_helloack(client_t *client);
 int client_send_goodbye(client_t *client);
-int client_timed_out(client_t *client);
-int client_check_and_resend(client_t *client);
-int client_send_keepalive(client_t *client);
+int client_check_and_resend(client_t *client, struct timeval curr_tv);
+int client_check_and_send_keepalive(client_t *client, struct timeval curr_tv);
+void client_reset_keepalive(client_t *client);
+int client_timed_out(client_t *client, struct timeval curr_tv);
 
 /* Function pointers to use when making a list_t of clients */
 #define p_client_copy ((void* (*)(void *, const void *, size_t))&client_copy)

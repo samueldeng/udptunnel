@@ -48,7 +48,7 @@
 #ifdef SOLARIS
 /* Copied from sys/time.h on linux system since solaris system that tried to
  * compile on didn't have timeradd macro. */
-#define timeradd(a, b, result)                                               \
+#define timeradd(a, b, result)                                                \
     do {                                                                      \
         (result)->tv_sec = (a)->tv_sec + (b)->tv_sec;                         \
         (result)->tv_usec = (a)->tv_usec + (b)->tv_usec;                      \
