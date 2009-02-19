@@ -335,11 +335,12 @@ int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
     ERROR_GOTO(bytes_recv == 0, "disconnect", disconnect);
 
 #if DEBUG
-        int i;
-        printf("sock_recv(%d): ", bytes_recv);
-        for(i = 0; i < bytes_recv; i++)
-            printf("%.2x", (uint8_t)data[i]);
-        printf("\n");
+    int i;
+    printf("sock_recv%d(%d): ", sock->type, bytes_recv);
+    //for(i = 0; i < bytes_recv; i++)
+    for(i = 0; i < 10 && i < bytes_recv; i++)
+        printf("%.2x", (uint8_t)data[i]);
+    printf("\n");
 #endif /* DEBUG */
     
     return bytes_recv;
@@ -383,11 +384,12 @@ int sock_send(socket_t *to, char *data, int len)
     }
 
 #if DEBUG
-        int i;
-        printf("sock_send(%d): ", bytes_sent);
-        for(i = 0; i < bytes_sent; i++)
-            printf("%.2x", (uint8_t)data[i]);
-        printf("\n");
+    int i;
+    printf("sock_send%d(%d): ", to->type, bytes_sent);
+    //for(i = 0; i < bytes_sent; i++)
+    for(i = 0; i < 10 && i < bytes_sent; i++)
+        printf("%.2x", (uint8_t)data[i]);
+    printf("\n");
 #endif /* DEBUG */
 
     return bytes_sent;

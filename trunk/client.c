@@ -207,13 +207,13 @@ int client_got_udp_data(client_t *client, char *data, int data_len,
     ret = msg_send_msg(client->udp_sock, client->id, msg_type, NULL, 0);
     if(ret < 0)
         return ret;
-
-    /* Set the state to wait for the next type of data */
-    client->udp2tcp_state = client->udp2tcp_state == CLIENT_WAIT_DATA0 ?
-        CLIENT_WAIT_DATA1 : CLIENT_WAIT_DATA0;    
-
+    
     if(is_resend)
         return 1;
+    
+    /* Set the state to wait for the next type of data */
+    client->udp2tcp_state = client->udp2tcp_state == CLIENT_WAIT_DATA0 ?
+        CLIENT_WAIT_DATA1 : CLIENT_WAIT_DATA0;
     
     return 0;
 }
