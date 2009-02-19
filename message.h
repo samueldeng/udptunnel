@@ -26,7 +26,7 @@
 #include <arpa/inet.h>
 #include "socket.h"
 
-#define MSG_MAX_LEN 4096 /* max bytes to send in body of message (16 bits) */
+#define MSG_MAX_LEN 1024 /* max bytes to send in body of message (16 bits) */
 #define KEEP_ALIVE_SECS 60
 #define KEEP_ALIVE_TIMEOUT_SECS (7*60+1) /* has 7 tries to send a keep alive */
 
