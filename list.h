@@ -22,6 +22,8 @@
 #ifndef LIST_H
 #define LIST_H
 
+#include "common.h"
+
 #define LIST_INIT_SIZE 10 /* Start off an array with 10 elements */
 
 typedef struct list {
@@ -52,7 +54,7 @@ void list_delete(list_t *list, void *obj);
 void list_delete_at(list_t *list, int i);
 void list_free(list_t *list);
 
-static inline int int_cmp(int *i, int *j, size_t sz)
+static _inline_ int int_cmp(int *i, int *j, size_t sz)
 {
     return *i - *j;
 }

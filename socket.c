@@ -21,15 +21,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <inttypes.h>
 #include <sys/types.h>
+
+#ifndef WIN32
+#include <unistd.h>
+#include <inttypes.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#endif /*WIN32*/
+
 #include "socket.h"
 #include "common.h"
+
+extern int debug_level;
 
 /*
  * Allocates and returns a new socket structure.
@@ -208,7 +214,11 @@ void sock_close(socket_t *s)
 {
     if(s->fd != -1)
     {
+#ifdef WIN32
+        closesocket(s->fd);
+#else
         close(s->fd);
+#endif
         s->fd = -1;
     }
 }
@@ -226,6 +236,14 @@ void sock_free(socket_t *s)
  * store result in buf, which len must be at least INET6_ADDRLEN + 6. Returns a
  * pointer to buf. String will be in the form of "ip_address:port".
  */
+#ifdef WIN32
+char *sock_get_str(socket_t *s, char *buf, int len)
+{
+    /* WSAAddressToString() gets the port also, so just call get_addrstr()
+       here because it will have the same output */
+    return sock_get_addrstr(s, buf, len);
+}
+#else
 char *sock_get_str(socket_t *s, char *buf, int len)
 {
     void *src_addr;
@@ -256,11 +274,26 @@ char *sock_get_str(socket_t *s, char *buf, int len)
     
     return buf;
 }
+#endif /*WIN32*/
 
 /*
  * Gets the string representation of the IP address and puts it in buf. Will
  * return the pointer to buf or NULL if there was an error.
  */
+#ifdef WIN32
+char *sock_get_addrstr(socket_t *s, char *buf, int len)
+{
+    DWORD plen = len;
+
+    if(WSAAddressToString((struct sockaddr *)&s->addr, s->addr_len,
+                          NULL, buf, &plen) != 0)
+    {
+        return NULL;
+    }
+
+    return buf;
+}
+#else
 char *sock_get_addrstr(socket_t *s, char *buf, int len)
 {
     void *src_addr;
@@ -284,6 +317,7 @@ char *sock_get_addrstr(socket_t *s, char *buf, int len)
 
     return buf;
 }
+#endif /*WIN32*/
 
 /*
  * Returns the 16-bit port number in host byte order from the passed sockaddr.
@@ -312,6 +346,7 @@ uint16_t sock_get_port(socket_t *s)
  */
 int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
 {
+    int i;
     int bytes_recv = 0;
     socket_t tmp;
     
@@ -334,14 +369,13 @@ int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
     PERROR_GOTO(bytes_recv < 0, "recv", error);
     ERROR_GOTO(bytes_recv == 0, "disconnect", disconnect);
 
-#if DEBUG
-    int i;
-    printf("sock_recv%d(%d): ", sock->type, bytes_recv);
-    //for(i = 0; i < bytes_recv; i++)
-    for(i = 0; i < 10 && i < bytes_recv; i++)
-        printf("%.2x", (uint8_t)data[i]);
-    printf("\n");
-#endif /* DEBUG */
+    if(debug_level >= DEBUG_LEVEL3)
+    {
+        printf("sock_recv%d(%d): ", sock->type, bytes_recv);
+        for(i = 0; i < bytes_recv; i++)
+            printf("%.2x", (uint8_t)data[i]);
+        printf("\n");
+    }
     
     return bytes_recv;
     
@@ -360,6 +394,7 @@ int sock_send(socket_t *to, char *data, int len)
 {
     int bytes_sent = 0;
     int ret;
+    int i;
     
     switch(to->type)
     {
@@ -383,14 +418,13 @@ int sock_send(socket_t *to, char *data, int len)
             return 0;
     }
 
-#if DEBUG
-    int i;
-    printf("sock_send%d(%d): ", to->type, bytes_sent);
-    //for(i = 0; i < bytes_sent; i++)
-    for(i = 0; i < 10 && i < bytes_sent; i++)
-        printf("%.2x", (uint8_t)data[i]);
-    printf("\n");
-#endif /* DEBUG */
+    if(debug_level >= DEBUG_LEVEL3)
+    {
+        printf("sock_send%d(%d): ", to->type, bytes_sent);
+        for(i = 0; i < bytes_sent; i++)
+            printf("%.2x", (uint8_t)data[i]);
+        printf("\n");
+    }
 
     return bytes_sent;
 
