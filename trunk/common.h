@@ -24,20 +24,35 @@
 
 #include <stdio.h>
 
-#define DEBUG 0
-#define ERR_DEBUG 1
+#define NO_DEBUG     0
+#define DEBUG_LEVEL1 1
+#define DEBUG_LEVEL2 2
+#define DEBUG_LEVEL3 3
 
-#define PERROR_GOTO(cond,err,label){     \
-        if(cond)                         \
-        {                                \
-            if(ERR_DEBUG) perror(err) ;  \
-            goto label;                  \
+#ifdef WIN32
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+#endif
+
+/* cl.exe has a different 'inline' keyword for some dumb reason */
+#ifdef WIN32
+#define _inline_ __inline
+#else
+#define _inline_ inline
+#endif
+
+#define PERROR_GOTO(cond,err,label){       \
+        if(cond)                           \
+        {                                  \
+            if(DEBUG_LEVEL1) perror(err) ; \
+            goto label;                    \
         }}
 
 #define ERROR_GOTO(cond,str,label){                  \
         if(cond)                                     \
         {                                            \
-            if(ERR_DEBUG)                            \
+            if(DEBUG_LEVEL1)                         \
                 fprintf(stderr, "Error: %s\n", str); \
             goto label;                              \
         }}

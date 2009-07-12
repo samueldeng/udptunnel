@@ -21,36 +21,45 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <signal.h>
+
+#ifndef WIN32
+#include <unistd.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#else
+#include "gettimeofday.h"
+#endif
+
 #include "common.h"
 #include "list.h"
 #include "client.h"
 #include "message.h"
 #include "socket.h"
 
+extern int debug_level;
+extern int ipver;
 static int running = 1;
 static int next_client_id = 1;
-static int ipver = SOCK_IPV4;
 
 /* internal functions */
-int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
-                   socket_t *from, list_t *clients, fd_set *client_fds);
-void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds);
-void usage(char *prog);
-void signal_handler(int sig);
+static int handle_message(uint16_t id, uint8_t msg_type, char *data,
+                          int data_len, socket_t *from, list_t *clients,
+                          fd_set *client_fds);
+static void disconnect_and_remove_client(uint16_t id, list_t *clients,
+                                         fd_set *fds);
+static void signal_handler(int sig);
 
 /*
  * UDP Tunnel server main(). Handles program arguments, initializes everything,
  * and runs the main loop.
  */
-int main(int argc, char *argv[])
+int udpserver(int argc, char *argv[])
 {
     char host_str[ADDRSTRLEN];
     char port_str[ADDRSTRLEN];
+    char addrstr[ADDRSTRLEN];
     
     list_t *clients = NULL;
     socket_t *udp_sock = NULL;
@@ -72,41 +81,22 @@ int main(int argc, char *argv[])
 
     int i;
     int ret;
-    
+
     signal(SIGINT, &signal_handler);
 
-    while((ret = getopt(argc, argv, "6")) != -1)
-    {
-        switch(ret)
-        {
-            case '6':
-                ipver = SOCK_IPV6;
-                break;
-
-            default:
-                usage(argv[0]);
-                exit(1);
-        }
-    }
-
     /* Get the port and address to listen on from command line */
-    if(argc - optind == 1)
+    if(argc == 1)
     {
-        strncpy(port_str, argv[optind], sizeof(port_str));
+        strncpy(port_str, argv[0], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
         host_str[0] = 0;
     }
-    else if(argc - optind == 2)
+    else if(argc == 2)
     {
-        strncpy(host_str, argv[optind], sizeof(host_str));
-        strncpy(port_str, argv[optind+1], sizeof(port_str));
+        strncpy(host_str, argv[0], sizeof(host_str));
+        strncpy(port_str, argv[1], sizeof(port_str));
         host_str[sizeof(host_str)-1] = 0;
         port_str[sizeof(port_str)-1] = 0;
-    }
-    else
-    {
-        usage(argv[0]);
-        exit(1);
     }
 
     /* Create an empty list for the clients */
@@ -120,7 +110,12 @@ int main(int argc, char *argv[])
                            ipver, SOCK_TYPE_UDP, 1, 1);
     if(!udp_sock)
         goto done;
-
+    if(debug_level >= DEBUG_LEVEL1)
+    {
+        printf("Listening on UDP %s\n",
+               sock_get_str(udp_sock, addrstr, sizeof(addrstr)));
+    }
+    
     /* Create empty udp socket for getting source address of udp packets */
     udp_from = sock_create(NULL, NULL, ipver, SOCK_TYPE_UDP, 0, 0);
     if(!udp_from)
@@ -206,8 +201,12 @@ int main(int argc, char *argv[])
                 if(ret == 0)
                     ret = client_send_udp_data(client);
                 else if(ret == 1)
+#ifdef WIN32
+                    _sleep(1000);
+#else
                     usleep(1000); /* Quick hack so doesn't use 100% CPU if
                                      data wasn't ready yet (waiting for ack) */
+#endif
                 if(ret == -2)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client),
@@ -221,7 +220,7 @@ int main(int argc, char *argv[])
     }
     
   done:
-    if(DEBUG)
+    if(debug_level >= DEBUG_LEVEL1)
         printf("Cleaning up...\n");
     if(clients)
         list_free(clients);
@@ -232,7 +231,7 @@ int main(int argc, char *argv[])
     }
     if(udp_from)
         sock_free(udp_from);
-    if(DEBUG)
+    if(debug_level >= DEBUG_LEVEL1)
         printf("Goodbye.\n");
     
     return 0;
@@ -365,11 +364,6 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
   error:
     return -1;
-}
-
-void usage(char *prog)
-{
-    printf("usage: %s [-6] [host] port\n", prog);
 }
 
 void signal_handler(int sig)

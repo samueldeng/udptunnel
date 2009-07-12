@@ -21,10 +21,16 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef WIN32
 #include <sys/time.h>
+#endif /*WIN32*/
+
 #include "common.h"
 #include "client.h"
 #include "socket.h"
+
+extern int debug_level;
 
 /*
  * Allocates and initializes a new client object.
@@ -381,7 +387,7 @@ int client_check_and_resend(client_t *client, struct timeval curr_tv)
        && timercmp(&curr_tv, &client->tcp2udp_timeout, >))
     {
         client->resend_count++;
-        if(DEBUG)
+        if(debug_level >= DEBUG_LEVEL2)
             printf("resending data, count %d\n", client->resend_count);
         
         return client_send_udp_data(client);

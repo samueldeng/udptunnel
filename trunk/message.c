@@ -21,8 +21,12 @@
 
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
+#endif /*WIN32*/
+
 #include "common.h"
 #include "message.h"
 #include "socket.h"
@@ -95,7 +99,11 @@ int msg_send_hello(socket_t *to, char *host, char *port)
     if(!str)
         return -1;
 
+#ifdef WIN32
+    _snprintf(str, len, "%s %s", host, port);
+#else
     snprintf(str, len, "%s %s", host, port);
+#endif
     str[len] = 0;
 
     len = msg_send_msg(to, 0, MSG_TYPE_HELLO, str, len-1);

@@ -19,51 +19,43 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Uncomment appropriate one for the system this is compiling for
-OS=LINUX
+#OS=LINUX
 #OS=SOLARIS
-#OS=CYGWIN
+OS=CYGWIN
 
 CC=gcc
-CFLAGS=-g -O0 -Wall -Wshadow -Wpointer-arith -Wwrite-strings -Wall -D ${OS}
+CFLAGS=-Wall -Wshadow -Wpointer-arith -Wwrite-strings -D ${OS}
 
 ifeq (${OS}, SOLARIS)
 LDFLAGS=-lnsl -lsocket -lresolv
 endif
 
-all: udpclient udpserver
+all: udptunnel
 
 #
-# Client program
+# Main program
 #
-CLIENT_OBJS=socket.o message.o client.o list.o
-udpclient: udpclient.o ${CLIENT_OBJS}
-	${CC} ${CFLAGS} -o udpclient udpclient.o ${CLIENT_OBJS} ${LDFLAGS}
-udpclient.o: udpclient.c common.h
-
+OBJS=socket.o message.o client.o list.o udpserver.o udpclient.o
+udptunnel: udptunnel.c ${OBJS}
+	${CC} ${CFLAGS} -o udptunnel udptunnel.c ${OBJS} ${LDFLAGS}
 
 #
-# Server program
-#
-SERVER_OBJS=list.o socket.o client.o message.o
-udpserver: udpserver.o ${SERVER_OBJS}
-	${CC} ${CFLAGS} -o udpserver udpserver.o ${SERVER_OBJS} ${LDFLAGS}
-udpserver.o: udpserver.c common.h
-
-#
-# Supporting "libraries"
+# Supporting code
 #
 list.o: list.c list.h common.h
 socket.o: socket.c socket.h common.h
 client.o: client.c client.h common.h
 message.o: message.c message.h common.h
+udpclient.o: udpclient.c list.h socket.h client.h message.h common.h
+udpserver.o: udpserver.c list.h socket.h client.h message.h common.h
 
 #
 # Clean compiled and temporary files
 #
 clean:
 ifeq (${OS}, CYGWIN)
-	rm -f udpclient.exe udpserver.exe
+	rm -f udptunnel.exe
 else
-	rm -f udpclient udpserver
+	rm -f udptunnel
 endif
 	rm -f *~ *.o

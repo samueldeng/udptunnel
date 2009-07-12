@@ -22,8 +22,12 @@
 #ifndef MESSAGE_H
 #define MESSAGE_H
 
+#ifndef WIN32
 #include <inttypes.h>
 #include <arpa/inet.h>
+#endif /*WIN32*/
+
+#include "common.h"
 #include "socket.h"
 
 #define MSG_MAX_LEN 1024 /* max bytes to send in body of message (16 bits) */
@@ -40,12 +44,24 @@
 #define MSG_TYPE_ACK0      0x07
 #define MSG_TYPE_ACK1      0x08
 
+#ifndef WIN32
 struct msg_hdr
 {
     uint16_t client_id;
     uint8_t type;
     uint16_t length;
 } __attribute__ ((__packed__));
+#else
+#pragma pack(push, 1)
+struct msg_hdr
+{
+    uint16_t client_id;
+    uint8_t type;
+    uint16_t length;
+};
+#pragma pack(pop)
+#endif /*WIN32*/
+
 typedef struct msg_hdr msg_hdr_t;
 
 int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
@@ -56,7 +72,7 @@ int msg_recv_msg(socket_t *sock, socket_t *from,
                  uint16_t *client_id, uint8_t *type, uint16_t *length);
 
 /* Inline functions for working with the message header struct */
-static inline void msg_init_header(msg_hdr_t *hdr, uint16_t client_id,
+static _inline_ void msg_init_header(msg_hdr_t *hdr, uint16_t client_id,
                                    uint8_t type, uint16_t len)
 {
     hdr->client_id = htons(client_id);
@@ -64,17 +80,17 @@ static inline void msg_init_header(msg_hdr_t *hdr, uint16_t client_id,
     hdr->length = htons(len);
 }
 
-static inline uint16_t msg_get_client_id(msg_hdr_t *h)
+static _inline_ uint16_t msg_get_client_id(msg_hdr_t *h)
 {
     return ntohs(h->client_id);
 }
 
-static inline uint8_t msg_get_type(msg_hdr_t *h)
+static _inline_ uint8_t msg_get_type(msg_hdr_t *h)
 {
     return h->type;
 }
 
-static inline uint16_t msg_get_length(msg_hdr_t *h)
+static _inline_ uint16_t msg_get_length(msg_hdr_t *h)
 {
     return ntohs(h->length);
 }

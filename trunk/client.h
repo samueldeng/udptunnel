@@ -22,8 +22,12 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#ifndef WIN32
 #include <inttypes.h>
 #include <sys/time.h>
+#endif /*WIN32*/
+
+#include "common.h"
 #include "socket.h"
 #include "message.h"
 
@@ -92,32 +96,32 @@ int client_timed_out(client_t *client, struct timeval curr_tv);
 /* Inline functions as wrappers for handling the file descriptors in the
  * client's sockets */
 
-static inline void client_add_tcp_fd_to_set(client_t *c, fd_set *set)
+static _inline_ void client_add_tcp_fd_to_set(client_t *c, fd_set *set)
 {
     FD_SET(SOCK_FD(c->tcp_sock), set);
 }
 
-static inline void client_add_udp_fd_to_set(client_t *c, fd_set *set)
+static _inline_ void client_add_udp_fd_to_set(client_t *c, fd_set *set)
 {
     FD_SET(SOCK_FD(c->udp_sock), set);
 }
 
-static inline int client_tcp_fd_isset(client_t *c, fd_set *set)
+static _inline_ int client_tcp_fd_isset(client_t *c, fd_set *set)
 {
     return FD_ISSET(SOCK_FD(c->tcp_sock), set);
 }
 
-static inline int client_udp_fd_isset(client_t *c, fd_set *set)
+static _inline_ int client_udp_fd_isset(client_t *c, fd_set *set)
 {
     return FD_ISSET(SOCK_FD(c->udp_sock), set);
 }
 
-static inline void client_remove_tcp_fd_from_set(client_t *c, fd_set *set)
+static _inline_ void client_remove_tcp_fd_from_set(client_t *c, fd_set *set)
 {
     FD_CLR(SOCK_FD(c->tcp_sock), set);
 }
 
-static inline void client_remove_udp_fd_from_set(client_t *c, fd_set *set)
+static _inline_ void client_remove_udp_fd_from_set(client_t *c, fd_set *set)
 {
     FD_CLR(SOCK_FD(c->udp_sock), set);
 }

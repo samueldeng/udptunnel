@@ -21,28 +21,34 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <signal.h>
+
+#ifndef WIN32
+#include <unistd.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#else
+#include "gettimeofday.h"
+#endif
+
 #include "common.h"
 #include "message.h"
 #include "socket.h"
 #include "client.h"
 #include "list.h"
 
+extern int debug_level;
+extern int ipver;
 static int running = 1;
-static int ipver = SOCK_IPV4;
 
 /* internal functions */
-int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
+static int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
                    char *data, int data_len);
-void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds);
-void usage(char *prog);
-void signal_handler(int sig);
+static void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds);
+static void signal_handler(int sig);
 
-int main(int argc, char *argv[])
+int udpclient(int argc, char *argv[])
 {
     char *lhost, *lport, *phost, *pport, *rhost, *rport;
     list_t *clients;
@@ -52,7 +58,8 @@ int main(int argc, char *argv[])
     socket_t *tcp_sock = NULL;
     socket_t *udp_sock = NULL;
     char data[MSG_MAX_LEN];
-
+    char addrstr[ADDRSTRLEN];
+    
     struct timeval curr_time;
     struct timeval check_time;
     struct timeval check_interval;
@@ -69,29 +76,7 @@ int main(int argc, char *argv[])
     
     signal(SIGINT, &signal_handler);
 
-    while((ret = getopt(argc, argv, "6")) != -1)
-    {
-        switch(ret)
-        {
-            case '6':
-                ipver = SOCK_IPV6;
-                break;
-
-            default:
-                usage(argv[0]);
-                exit(1);
-        }
-    }
-    
-    /* Set host and port string pointers to args from the command line */
-    i = optind;
-
-    if(argc - i != 5 && argc - i != 6)
-    {
-        usage(argv[0]);
-        exit(1);
-    }
-    
+    i = 0;    
     lhost = (argc - i == 5) ? NULL : argv[i++];
     lport = argv[i++];
     phost = argv[i++];
@@ -107,7 +92,12 @@ int main(int argc, char *argv[])
     /* Create a TCP server socket to listen for incoming connections */
     tcp_serv = sock_create(lhost, lport, ipver, SOCK_TYPE_TCP, 1, 1);
     ERROR_GOTO(tcp_serv == NULL, "Error creating TCP socket.", done);
-
+    if(debug_level >= DEBUG_LEVEL1)
+    {
+        printf("Listening on TCP %s\n",
+               sock_get_str(tcp_serv, addrstr, sizeof(addrstr)));
+    }
+    
     FD_ZERO(&client_fds);
 
     /* Initialize all the timers */
@@ -230,7 +220,11 @@ int main(int argc, char *argv[])
                 if(ret == 0)
                     ret = client_send_udp_data(client);
                 else if(ret == 1)
+#ifdef WIN32
+                    _sleep(1000);
+#else
                     usleep(1000);
+#endif
                 
                 if(ret == -2)
                 {
@@ -243,7 +237,7 @@ int main(int argc, char *argv[])
     }
     
   done:
-    if(DEBUG)
+    if(debug_level >= DEBUG_LEVEL1)
         printf("Cleaning up...\n");
     if(tcp_serv)
     {
@@ -257,7 +251,7 @@ int main(int argc, char *argv[])
     }
     if(clients)
         list_free(clients);
-    if(DEBUG)
+    if(debug_level >= DEBUG_LEVEL1)
         printf("Goodbye.\n");
     return 0;
 }
@@ -323,12 +317,6 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
     }
 
     return ret;
-}
-
-void usage(char *prog)
-{
-    printf("usage: %s [-6] [local host] <local port> <proxy host> "
-           "<proxy port>\n            <remote host> <remote port>\n", prog);
 }
 
 void signal_handler(int sig)
