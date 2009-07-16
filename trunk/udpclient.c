@@ -269,6 +269,9 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
         return;
 
     client_send_goodbye(c);
+
+    if(debug_level >= DEBUG_LEVEL1)
+        printf("Client %d disconnected.\n", CLIENT_ID(c));
     
     client_remove_udp_fd_from_set(c, fds);
     client_remove_tcp_fd_from_set(c, fds);
@@ -285,7 +288,8 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
                    char *data, int data_len)
 {
     int ret = 0;
-
+    char addrstr[ADDRSTRLEN];
+    
     switch(msg_type)
     {
         case MSG_TYPE_GOODBYE:
@@ -297,6 +301,14 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
             if(CLIENT_ID(c) == 0)
                 CLIENT_ID(c) = id;
             ret = client_send_helloack(c);
+
+            if(debug_level >= DEBUG_LEVEL1)
+            {
+                sock_get_str(c->tcp_sock, addrstr, sizeof(addrstr));
+                printf("New connection(%d): tcp://%s", CLIENT_ID(c), addrstr);
+                sock_get_str(c->udp_sock, addrstr, sizeof(addrstr));
+                printf(" -> udp://:%s\n", addrstr);
+            }
             break;
             
         case MSG_TYPE_DATA0:

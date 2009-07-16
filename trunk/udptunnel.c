@@ -112,6 +112,6 @@ void usage(char *progname)
            "  -s    server mode\n"
            "        <args>: [host] port\n"
            "  -6    use IPv6\n"
-           "  -v    show some debugging output (use up to 3 for increaing levels\n"
+           "  -v    show some debugging output (use up to 3 for increaing levels)\n"
            "  -h    show this junks and exit\n");
 }
