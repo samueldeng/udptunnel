@@ -252,6 +252,9 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
     if(!c)
         return;
 
+    if(debug_level >= DEBUG_LEVEL1)
+        printf("Client %d disconnected.\n", CLIENT_ID(c));
+    
     client_remove_tcp_fd_from_set(c, fds);
     client_disconnect_tcp(c);
     list_delete(clients, &id);
@@ -293,7 +296,8 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
         {
             int i;
             char port[6]; /* need this so port str can have null term. */
-
+            char addrstr[ADDRSTRLEN];
+            
             if(id != 0)
                 break;
 
@@ -321,6 +325,14 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             ERROR_GOTO(c2 == NULL, "Error adding client to list", error);
             client_free(c);
 
+            if(debug_level >= DEBUG_LEVEL1)
+            {
+                sock_get_str(c2->udp_sock, addrstr, sizeof(addrstr));
+                printf("New connection(%d): udp://%s", CLIENT_ID(c2), addrstr);
+                sock_get_str(c2->tcp_sock, addrstr, sizeof(addrstr));
+                printf(" -> tcp://%s\n", addrstr);
+            }
+            
             /* Send the Hello ACK message if created client successfully */
             client_send_helloack(c2);
             client_reset_keepalive(c2);

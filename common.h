@@ -42,17 +42,18 @@ typedef unsigned int uint32_t;
 #define _inline_ inline
 #endif
 
-#define PERROR_GOTO(cond,err,label){       \
-        if(cond)                           \
-        {                                  \
-            if(DEBUG_LEVEL1) perror(err) ; \
-            goto label;                    \
+#define PERROR_GOTO(cond,err,label){        \
+        if(cond)                            \
+        {                                   \
+            if(debug_level >= DEBUG_LEVEL1) \
+                perror(err) ;               \
+            goto label;                     \
         }}
 
 #define ERROR_GOTO(cond,str,label){                  \
         if(cond)                                     \
         {                                            \
-            if(DEBUG_LEVEL1)                         \
+            if(debug_level >= DEBUG_LEVEL2)          \
                 fprintf(stderr, "Error: %s\n", str); \
             goto label;                              \
         }}
