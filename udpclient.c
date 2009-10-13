@@ -219,12 +219,15 @@ int udpclient(int argc, char *argv[])
                 ret = client_recv_tcp_data(client);
                 if(ret == 0)
                     ret = client_send_udp_data(client);
+#if 0 /* if udptunnel is taking up 100% of cpu, try including this */
                 else if(ret == 1)
 #ifdef WIN32
-                    _sleep(1000);
+                    _sleep(1);
 #else
-                    usleep(1000);
-#endif
+                    usleep(1000); /* Quick hack so doesn't use 100% of CPU if
+                                     data wasn't ready yet (waiting for ack) */
+#endif /*WIN32*/
+#endif /*0*/          
                 
                 if(ret == -2)
                 {
