@@ -275,7 +275,7 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
     socket_t *tcp_sock = NULL;
     int ret = 0;
     
-    if(id != 0)
+    if(id != 0 && msg_type != MSG_TYPE_HELLO)
     {
         c = list_get(clients, &id);
         if(!c)
@@ -300,8 +300,8 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             char port[6]; /* need this so port str can have null term. */
             char addrstr[ADDRSTRLEN];
             
-            if(id != 0)
-                break;
+            //if(id != 0)
+            //    break;
 
             /* look for the space separating the host and port */
             for(i = 0; i < data_len; i++)
@@ -319,7 +319,8 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
                client itself, add it to the list of clients */
             tcp_sock = sock_create(data, port, ipver, SOCK_TYPE_TCP, 0, 0);
             ERROR_GOTO(tcp_sock == NULL, "Error creating tcp socket", error);
-            c = client_create(next_client_id, tcp_sock, from, 0);
+            //c = client_create(next_client_id, tcp_sock, from, 0);
+            c = client_create(id, tcp_sock, from, 0);
             sock_free(tcp_sock);
             ERROR_GOTO(c == NULL, "Error creating client", error);
             next_client_id++;

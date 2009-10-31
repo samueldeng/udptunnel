@@ -344,7 +344,7 @@ int client_got_ack(client_t *client, uint8_t ack_type)
  */
 int client_send_hello(client_t *client, char *host, char *port)
 {
-    return msg_send_hello(client->udp_sock, host, port);
+    return msg_send_hello(client->udp_sock, host, port, CLIENT_ID(client));
 }
 
 /*

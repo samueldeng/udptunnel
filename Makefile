@@ -19,9 +19,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Uncomment appropriate one for the system this is compiling for
-#OS=LINUX
+OS=LINUX
 #OS=SOLARIS
-OS=CYGWIN
+#OS=CYGWIN
 
 CC=gcc
 CFLAGS=-Wall -Wshadow -Wpointer-arith -Wwrite-strings -D ${OS}

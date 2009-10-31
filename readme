@@ -29,8 +29,8 @@ CYGWIN in Makefile and run 'make'.
 
 If using the VC++ compiler (cl.exe), make sure to be in the "Visual Studio
 Command Prompt", or at least have all the environment variables set correctly,
-then run 'nmake.exe /f Makefile.Win32'. Also make sure the location of 
-WS2_32.Lib is specified correctly fo the LIBS variable.
+then run 'nmake.exe /f Makefile.Win32'. Also, make sure the location of 
+WS2_32.Lib is specified correctly for the LIBS variable in Makefile.Win32.
 
 
 -----------------------------------------------------------------------------

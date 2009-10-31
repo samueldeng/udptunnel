@@ -66,7 +66,7 @@ typedef struct msg_hdr msg_hdr_t;
 
 int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
                  char *data, int data_len);
-int msg_send_hello(socket_t *to, char *host, char *port);
+int msg_send_hello(socket_t *to, char *host, char *port, uint16_t client_id);
 int msg_recv_msg(socket_t *sock, socket_t *from,
                  char *data, int data_len,
                  uint16_t *client_id, uint8_t *type, uint16_t *length);

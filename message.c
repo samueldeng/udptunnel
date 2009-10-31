@@ -89,12 +89,12 @@ int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
  * port in the body.
  * Returns 0 for success, -1 on error, or -2 to disconnect.
  */
-int msg_send_hello(socket_t *to, char *host, char *port)
+int msg_send_hello(socket_t *to, char *host, char *port, uint16_t client_id)
 {
     char *str;
     int len;
 
-    len = strlen(host) + strlen(port) + 2;
+    len = strlen(host) + strlen(port) + 2 + 1;
     str = malloc(len);
     if(!str)
         return -1;
@@ -104,9 +104,9 @@ int msg_send_hello(socket_t *to, char *host, char *port)
 #else
     snprintf(str, len, "%s %s", host, port);
 #endif
-    str[len] = 0;
+    str[len-1] = 0;
 
-    len = msg_send_msg(to, 0, MSG_TYPE_HELLO, str, len-1);
+    len = msg_send_msg(to, client_id, MSG_TYPE_HELLO, str, len-1);
     free(str);
 
     if(len < 0)

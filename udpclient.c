@@ -41,6 +41,8 @@
 extern int debug_level;
 extern int ipver;
 static int running = 1;
+//static int next_request_id = 0x80000000;
+static int next_client_id = 1;
 
 /* internal functions */
 static int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
@@ -160,7 +162,7 @@ int udpclient(int argc, char *argv[])
             udp_sock = sock_create(phost, pport, ipver,
                                    SOCK_TYPE_UDP, 0, 1);
 
-            client = client_create(0, tcp_sock, udp_sock, 1);
+            client = client_create(next_client_id++, tcp_sock, udp_sock, 1);
             if(!client || !tcp_sock || !udp_sock)
             {
                 if(tcp_sock)
@@ -301,8 +303,9 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
             
         case MSG_TYPE_HELLOACK:
             client_got_helloack(c);
-            if(CLIENT_ID(c) == 0)
-                CLIENT_ID(c) = id;
+            //if(CLIENT_ID(c) == 0)
+            //    CLIENT_ID(c) = id;
+            CLIENT_ID(c) = id;
             ret = client_send_helloack(c);
 
             if(debug_level >= DEBUG_LEVEL1)
