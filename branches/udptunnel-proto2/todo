@@ -1,0 +1,16 @@
+=============================================================================
+
+  UDPTUNNEL TODO
+
+  Author: Daniel Meekins
+  Contact: dmeekins - gmail
+
+  Copyright (C) 2009 Daniel Meekins
+
+=============================================================================
+
+- Implement timeout and resending for new connections from the udpclient.
+- Allow to run using IPv6 and IPv4 at the same time (e.g. IPv4 on the outter
+  connections and IPv6 for the tunnel, or visa versa).
+- Comment parts of the code that need it more.
+- Do the stuff listed here.
