@@ -299,10 +299,15 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             int i;
             char port[6]; /* need this so port str can have null term. */
             char addrstr[ADDRSTRLEN];
+            uint16_t req_id;
             
             if(id != 0)
                 break;
 
+            req_id = ntohs(*((uint16_t*)data));
+            data += sizeof(uint16_t);
+            data_len -= sizeof(uint16_t);
+            
             /* look for the space separating the host and port */
             for(i = 0; i < data_len; i++)
                 if(data[i] == ' ')
@@ -315,17 +320,17 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             strncpy(port, data+i, data_len-i);
             port[data_len-i] = 0;
 
-            /* Create and unconnected TCP socket for the remote host, the
+            /* Create an unconnected TCP socket for the remote host, the
                client itself, add it to the list of clients */
             tcp_sock = sock_create(data, port, ipver, SOCK_TYPE_TCP, 0, 0);
             ERROR_GOTO(tcp_sock == NULL, "Error creating tcp socket", error);
-            c = client_create(next_client_id, tcp_sock, from, 0);
+
+            c = client_create(next_client_id++, tcp_sock, from, 0);
             sock_free(tcp_sock);
             ERROR_GOTO(c == NULL, "Error creating client", error);
-            next_client_id++;
+
             c2 = list_add(clients, c);
             ERROR_GOTO(c2 == NULL, "Error adding client to list", error);
-            client_free(c);
 
             if(debug_level >= DEBUG_LEVEL1)
             {
@@ -336,8 +341,9 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             }
             
             /* Send the Hello ACK message if created client successfully */
-            client_send_helloack(c2);
+            client_send_helloack(c2, req_id);
             client_reset_keepalive(c2);
+            client_free(c);
             
             break;
         }

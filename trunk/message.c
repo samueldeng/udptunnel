@@ -42,25 +42,20 @@ int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
 {
     char buf[MSG_MAX_LEN + sizeof(msg_hdr_t)];
     int len; /* length for entire packet */
-    uint16_t tmp_id;
+    //uint16_t tmp_id;
 
     if(data_len > MSG_MAX_LEN)
         return -1;
     
     switch(type)
     {
-        case MSG_TYPE_HELLO:            
+        case MSG_TYPE_HELLO:
+        case MSG_TYPE_HELLOACK:
         case MSG_TYPE_DATA0:
         case MSG_TYPE_DATA1:
             memcpy(buf+sizeof(msg_hdr_t), data, data_len);
             break;
 
-        case MSG_TYPE_HELLOACK:
-            tmp_id = htons(client_id);
-            memcpy(buf+sizeof(msg_hdr_t), &tmp_id, sizeof(tmp_id));
-            data_len = sizeof(tmp_id);
-            break;
-            
         case MSG_TYPE_GOODBYE:
         case MSG_TYPE_KEEPALIVE:
         case MSG_TYPE_ACK0:
@@ -89,25 +84,29 @@ int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
  * port in the body.
  * Returns 0 for success, -1 on error, or -2 to disconnect.
  */
-int msg_send_hello(socket_t *to, char *host, char *port)
+int msg_send_hello(socket_t *to, char *host, char *port, uint16_t req_id)
 {
-    char *str;
+    char *data;
+    int str_len;
     int len;
 
-    len = strlen(host) + strlen(port) + 2;
-    str = malloc(len);
-    if(!str)
+    str_len = strlen(host) + strlen(port) + 2;
+    len = str_len + sizeof(req_id);
+
+    data = malloc(len);
+    if(!data)
         return -1;
 
-#ifdef WIN32
-    _snprintf(str, len, "%s %s", host, port);
-#else
-    snprintf(str, len, "%s %s", host, port);
-#endif
-    str[len] = 0;
+    *((uint16_t *)data) = htons(req_id);
 
-    len = msg_send_msg(to, 0, MSG_TYPE_HELLO, str, len-1);
-    free(str);
+#ifdef WIN32
+    _snprintf(data + sizeof(req_id), str_len, "%s %s", host, port);
+#else
+    snprintf(data + sizeof(req_id), str_len, "%s %s", host, port);
+#endif
+
+    len = msg_send_msg(to, 0, MSG_TYPE_HELLO, data, len-1);
+    free(data);
 
     if(len < 0)
         return -1;

@@ -37,6 +37,8 @@
 
 extern int debug_level;
 
+void print_hexdump(char *data, int len);
+
 /*
  * Allocates and returns a new socket structure.
  * host - string of host or address to listen on (can be NULL for servers)
@@ -346,7 +348,6 @@ uint16_t sock_get_port(socket_t *s)
  */
 int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
 {
-    int i;
     int bytes_recv = 0;
     socket_t tmp;
     
@@ -371,10 +372,9 @@ int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
 
     if(debug_level >= DEBUG_LEVEL3)
     {
-        printf("sock_recv%d(%d): ", sock->type, bytes_recv);
-        for(i = 0; i < bytes_recv; i++)
-            printf("%.2x", (uint8_t)data[i]);
-        printf("\n");
+        printf("sock_recv: type=%d, fd=%d, bytes=%d\n",
+               sock->type, sock->fd, bytes_recv);
+        print_hexdump(data, bytes_recv);
     }
     
     return bytes_recv;
@@ -394,7 +394,6 @@ int sock_send(socket_t *to, char *data, int len)
 {
     int bytes_sent = 0;
     int ret;
-    int i;
     
     switch(to->type)
     {
@@ -420,10 +419,9 @@ int sock_send(socket_t *to, char *data, int len)
 
     if(debug_level >= DEBUG_LEVEL3)
     {
-        printf("sock_send%d(%d): ", to->type, bytes_sent);
-        for(i = 0; i < bytes_sent; i++)
-            printf("%.2x", (uint8_t)data[i]);
-        printf("\n");
+        printf("sock_send: type=%d, fd=%d, bytes=%d\n",
+               to->type, to->fd, bytes_sent);
+        print_hexdump(data, bytes_sent);
     }
 
     return bytes_sent;
@@ -433,4 +431,64 @@ int sock_send(socket_t *to, char *data, int len)
     
   error:
     return -1;
+}
+
+void print_hexdump(char *data, int len)
+{
+    int line;
+    int max_lines = (len / 16) + (len % 16 == 0 ? 0 : 1);
+    int i;
+    
+    for(line = 0; line < max_lines; line++)
+    {
+        printf("%08x  ", line * 16);
+
+        /* print hex */
+        for(i = line * 16; i < (8 + (line * 16)); i++)
+        {
+            if(i < len)
+                printf("%02x ", (uint8_t)data[i]);
+            else
+                printf("   ");
+        }
+        printf(" ");
+        for(i = (line * 16) + 8; i < (16 + (line * 16)); i++)
+        {
+            if(i < len)
+                printf("%02x ", (uint8_t)data[i]);
+            else
+                printf("   ");
+        }
+
+        printf(" ");
+        
+        /* print ascii */
+        for(i = line * 16; i < (8 + (line * 16)); i++)
+        {
+            if(i < len)
+            {
+                if(32 <= data[i] && data[i] <= 126)
+                    printf("%c", data[i]);
+                else
+                    printf(".");
+            }
+            else
+                printf(" ");
+        }
+        printf(" ");
+        for(i = (line * 16) + 8; i < (16 + (line * 16)); i++)
+        {
+            if(i < len)
+            {
+                if(32 <= data[i] && data[i] <= 126)
+                    printf("%c", data[i]);
+                else
+                    printf(".");
+            }
+            else
+                printf(" ");
+        }
+
+        printf("\n");
+    }
 }

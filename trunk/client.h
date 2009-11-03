@@ -79,8 +79,9 @@ int client_send_tcp_data(client_t *client);
 int client_recv_tcp_data(client_t *client);
 int client_send_udp_data(client_t *client);
 int client_got_ack(client_t *client, uint8_t ack_type);
-int client_send_hello(client_t *client, char *host, char *port);
-int client_send_helloack(client_t *client);
+int client_send_hello(client_t *client, char *host, char *port,
+                      uint16_t req_id);
+int client_send_helloack(client_t *client, uint16_t req_id);
 int client_got_helloack(client_t *client);
 int client_send_goodbye(client_t *client);
 int client_check_and_resend(client_t *client, struct timeval curr_tv);
@@ -98,32 +99,39 @@ int client_timed_out(client_t *client, struct timeval curr_tv);
 
 static _inline_ void client_add_tcp_fd_to_set(client_t *c, fd_set *set)
 {
-    FD_SET(SOCK_FD(c->tcp_sock), set);
+    if(SOCK_FD(c->tcp_sock) >= 0)
+        FD_SET(SOCK_FD(c->tcp_sock), set);
 }
 
 static _inline_ void client_add_udp_fd_to_set(client_t *c, fd_set *set)
 {
-    FD_SET(SOCK_FD(c->udp_sock), set);
+    if(SOCK_FD(c->udp_sock) >= 0)
+        FD_SET(SOCK_FD(c->udp_sock), set);
 }
 
 static _inline_ int client_tcp_fd_isset(client_t *c, fd_set *set)
 {
-    return FD_ISSET(SOCK_FD(c->tcp_sock), set);
+    return SOCK_FD(c->tcp_sock) >= 0 ?
+        FD_ISSET(SOCK_FD(c->tcp_sock), set) : 0;
 }
 
 static _inline_ int client_udp_fd_isset(client_t *c, fd_set *set)
 {
-    return FD_ISSET(SOCK_FD(c->udp_sock), set);
+    return SOCK_FD(c->udp_sock) >= 0 ?
+        FD_ISSET(SOCK_FD(c->udp_sock), set) : 0;
+    
 }
 
 static _inline_ void client_remove_tcp_fd_from_set(client_t *c, fd_set *set)
 {
-    FD_CLR(SOCK_FD(c->tcp_sock), set);
+    if(SOCK_FD(c->tcp_sock) >= 0)
+        FD_CLR(SOCK_FD(c->tcp_sock), set);
 }
 
 static _inline_ void client_remove_udp_fd_from_set(client_t *c, fd_set *set)
 {
-    FD_CLR(SOCK_FD(c->udp_sock), set);
+    if(SOCK_FD(c->udp_sock) >= 0)
+        FD_CLR(SOCK_FD(c->udp_sock), set);
 }
 
 #endif /* CLIENT_H */

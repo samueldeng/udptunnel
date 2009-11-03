@@ -342,18 +342,21 @@ int client_got_ack(client_t *client, uint8_t ack_type)
  * Sends a HELLO type message to the udpserver (proxy) to tell it to make a
  * TCP connection to the specified host:port.
  */
-int client_send_hello(client_t *client, char *host, char *port)
+int client_send_hello(client_t *client, char *host, char *port,
+                      uint16_t req_id)
 {
-    return msg_send_hello(client->udp_sock, host, port);
+    return msg_send_hello(client->udp_sock, host, port, req_id);
 }
 
 /*
  * Sends a Hello ACK to the UDP tunnel.
  */
-int client_send_helloack(client_t *client)
+int client_send_helloack(client_t *client, uint16_t req_id)
 {
+    req_id = htons(req_id);
+
     return msg_send_msg(client->udp_sock, client->id, MSG_TYPE_HELLOACK,
-                        NULL, 0);
+                        (char *)&req_id, sizeof(req_id));
 }
 
 /*
@@ -388,7 +391,8 @@ int client_check_and_resend(client_t *client, struct timeval curr_tv)
     {
         client->resend_count++;
         if(debug_level >= DEBUG_LEVEL2)
-            printf("resending data, count %d\n", client->resend_count);
+            printf("client(%d): resending data, count %d\n",
+                   CLIENT_ID(client), client->resend_count);
         
         return client_send_udp_data(client);
     }
