@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 
 #ifndef WIN32
 #include <unistd.h>
@@ -41,17 +42,20 @@
 extern int debug_level;
 extern int ipver;
 static int running = 1;
+static uint16_t next_req_id;
 
 /* internal functions */
 static int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
-                   char *data, int data_len);
-static void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds);
+                          char *data, int data_len);
+static void disconnect_and_remove_client(uint16_t id, list_t *clients,
+                                         fd_set *fds);
 static void signal_handler(int sig);
 
 int udpclient(int argc, char *argv[])
 {
     char *lhost, *lport, *phost, *pport, *rhost, *rport;
     list_t *clients;
+    list_t *conn_clients;
     client_t *client;
     client_t *client2;
     socket_t *tcp_serv = NULL;
@@ -69,6 +73,7 @@ int udpclient(int argc, char *argv[])
     uint16_t tmp_id;
     uint8_t tmp_type;
     uint16_t tmp_len;
+    uint16_t tmp_req_id;
     int num_fds;
     
     int ret;
@@ -84,10 +89,18 @@ int udpclient(int argc, char *argv[])
     rhost = argv[i++];
     rport = argv[i++];
 
+    srand(time(NULL));
+    next_req_id = rand() % 0xffff;
+    
     /* Create an empty list for the clients */
     clients = list_create(sizeof(client_t), p_client_cmp, p_client_copy,
                           p_client_free);
     ERROR_GOTO(clients == NULL, "Error creating clients list.", done);
+
+    /* Create and empty list for the connecting clients */
+    conn_clients = list_create(sizeof(client_t), p_client_cmp, p_client_copy,
+                               p_client_free);
+    ERROR_GOTO(conn_clients == NULL, "Error creating clients list.", done);
 
     /* Create a TCP server socket to listen for incoming connections */
     tcp_serv = sock_create(lhost, lport, ipver, SOCK_TYPE_TCP, 1, 1);
@@ -151,7 +164,7 @@ int udpclient(int argc, char *argv[])
         
         if(num_fds == 0)
             continue;
-        
+
         /* Check if pending TCP connection to accept and create a new client
            and UDP connection if one is ready */
         if(FD_ISSET(SOCK_FD(tcp_serv), &read_fds))
@@ -160,7 +173,7 @@ int udpclient(int argc, char *argv[])
             udp_sock = sock_create(phost, pport, ipver,
                                    SOCK_TYPE_UDP, 0, 1);
 
-            client = client_create(0, tcp_sock, udp_sock, 1);
+            client = client_create(next_req_id++, tcp_sock, udp_sock, 1);
             if(!client || !tcp_sock || !udp_sock)
             {
                 if(tcp_sock)
@@ -170,11 +183,11 @@ int udpclient(int argc, char *argv[])
             }
             else
             {
-                client2 = list_add(clients, client);
+                client2 = list_add(conn_clients, client);
                 client_free(client);
                 client = NULL;
                 
-                client_send_hello(client2, rhost, rport);
+                client_send_hello(client2, rhost, rport, CLIENT_ID(client2));
                 client_add_tcp_fd_to_set(client2, &client_fds);
                 client_add_udp_fd_to_set(client2, &client_fds);
             }
@@ -185,6 +198,37 @@ int udpclient(int argc, char *argv[])
             udp_sock = NULL;
 
             num_fds--;
+        }
+
+        /* Check for pending handshakes from UDP connection */
+        for(i = 0; i < LIST_LEN(conn_clients) && num_fds > 0; i++)
+        {
+            client = list_get_at(conn_clients, i);
+            
+            if(client_udp_fd_isset(client, &read_fds))
+            {
+                num_fds--;
+                tmp_req_id = CLIENT_ID(client);
+
+                ret = client_recv_udp_msg(client, data, sizeof(data),
+                                          &tmp_id, &tmp_type, &tmp_len);
+                if(ret == 0)
+                    ret = handle_message(client, tmp_id, tmp_type,
+                                         data, tmp_len);
+                if(ret < 0)
+                {
+                    disconnect_and_remove_client(tmp_req_id, conn_clients,
+                                                 &client_fds);
+                    i--;
+                }
+                else
+                {
+                    client = list_add(clients, client);
+                    list_delete_at(conn_clients, i);
+                    client_remove_udp_fd_from_set(client, &read_fds);
+                    i--;
+                }
+            }
         }
 
         /* Check if data is ready from any of the clients */
@@ -202,7 +246,7 @@ int udpclient(int argc, char *argv[])
                 if(ret == 0)
                     ret = handle_message(client, tmp_id, tmp_type,
                                          data, tmp_len);
-                if(ret == -2)
+                if(ret < 0)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
                                                  &client_fds);
@@ -229,7 +273,7 @@ int udpclient(int argc, char *argv[])
 #endif /*WIN32*/
 #endif /*0*/          
                 
-                if(ret == -2)
+                if(ret < 0)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
                                                  &client_fds);
@@ -301,16 +345,15 @@ int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
             
         case MSG_TYPE_HELLOACK:
             client_got_helloack(c);
-            if(CLIENT_ID(c) == 0)
-                CLIENT_ID(c) = id;
-            ret = client_send_helloack(c);
+            CLIENT_ID(c) = id;
+            ret = client_send_helloack(c, ntohs(*((uint16_t *)data)));
 
             if(debug_level >= DEBUG_LEVEL1)
             {
                 sock_get_str(c->tcp_sock, addrstr, sizeof(addrstr));
                 printf("New connection(%d): tcp://%s", CLIENT_ID(c), addrstr);
                 sock_get_str(c->udp_sock, addrstr, sizeof(addrstr));
-                printf(" -> udp://:%s\n", addrstr);
+                printf(" -> udp://%s\n", addrstr);
             }
             break;
             
