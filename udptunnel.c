@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
     
     if(isserv)
     {
-        if(argc - optind != 1 && argc - optind != 2)
+        if(argc - optind < 1)
             goto error;
         ret = udpserver(argc - optind, argv + optind);
     }
@@ -110,7 +110,7 @@ void usage(char *progname)
            "        <args>: [local host] <local port> <proxy host> <proxy port>\n"
            "                <remote host> <remote port>\n"
            "  -s    server mode\n"
-           "        <args>: [host] port\n"
+           "        <args>: [host] port [[host]:[port] ...]\n"
            "  -6    use IPv6\n"
            "  -v    show some debugging output (use up to 3 for increaing levels)\n"
            "  -h    show this junks and exit\n");

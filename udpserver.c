@@ -37,6 +37,7 @@
 #include "client.h"
 #include "message.h"
 #include "socket.h"
+#include "destination.h"
 
 extern int debug_level;
 extern int ipver;
@@ -46,7 +47,10 @@ static int next_client_id = 1;
 /* internal functions */
 static int handle_message(uint16_t id, uint8_t msg_type, char *data,
                           int data_len, socket_t *from, list_t *clients,
-                          fd_set *client_fds);
+                          fd_set *client_fds,
+                          list_t *allowed_destinations);
+static int destination_allowed(list_t *allowed_destinations,
+                               const char *host, const char *port);
 static void disconnect_and_remove_client(uint16_t id, list_t *clients,
                                          fd_set *fds);
 static void signal_handler(int sig);
@@ -62,6 +66,7 @@ int udpserver(int argc, char *argv[])
     char addrstr[ADDRSTRLEN];
     
     list_t *clients = NULL;
+    list_t *allowed_destinations = NULL;
     socket_t *udp_sock = NULL;
     socket_t *udp_from = NULL;
     char data[MSG_MAX_LEN];
@@ -80,23 +85,53 @@ int udpserver(int argc, char *argv[])
     int num_fds;
 
     int i;
+    int allowed_start;
     int ret;
 
     signal(SIGINT, &signal_handler);
 
+    /* Scan for start of allowed destination parameters */
+    allowed_start = argc;
+    for (i = 0; i < argc; i++)
+      if (strchr(argv[i], ':'))
+      {
+          allowed_start = i;
+          break;
+      }
+
     /* Get the port and address to listen on from command line */
-    if(argc == 1)
+    if(allowed_start == 1)
     {
         strncpy(port_str, argv[0], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
         host_str[0] = 0;
     }
-    else if(argc == 2)
+    else if(allowed_start == 2)
     {
         strncpy(host_str, argv[0], sizeof(host_str));
         strncpy(port_str, argv[1], sizeof(port_str));
         host_str[sizeof(host_str)-1] = 0;
         port_str[sizeof(port_str)-1] = 0;
+    }
+
+    /* Build allowed destination list */
+    if (allowed_start < argc)
+    {
+        allowed_destinations = list_create(sizeof(destination_t),
+                                           p_destination_cmp,
+                                           p_destination_copy,
+                                           p_destination_free);
+        if (!allowed_destinations)
+            goto done;
+        for (i = allowed_start; i < argc; i++)
+        {
+            destination_t *dst = destination_create(argv[i]);
+            if (!dst)
+                goto done;
+            if (!list_add(allowed_destinations, dst))
+                goto done;
+            destination_free(dst);
+        }
     }
 
     /* Create an empty list for the clients */
@@ -183,7 +218,8 @@ int udpserver(int argc, char *argv[])
             
             if(ret == 0)
                 ret = handle_message(tmp_id, tmp_type, data, tmp_len,
-                                     udp_from, clients, &client_fds);
+                                     udp_from, clients, &client_fds,
+                                     allowed_destinations);
             if(ret == -2)
                 disconnect_and_remove_client(tmp_id, clients, &client_fds);
 
@@ -224,6 +260,8 @@ int udpserver(int argc, char *argv[])
   done:
     if(debug_level >= DEBUG_LEVEL1)
         printf("Cleaning up...\n");
+    if(allowed_destinations)
+        list_free(allowed_destinations);
     if(clients)
         list_free(clients);
     if(udp_sock)
@@ -268,7 +306,8 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
  * disconnected.
  */
 int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
-                   socket_t *from, list_t *clients, fd_set *client_fds)
+                   socket_t *from, list_t *clients, fd_set *client_fds,
+                   list_t *allowed_destinations)
 {
     client_t *c = NULL;
     client_t *c2 = NULL;
@@ -320,6 +359,14 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             strncpy(port, data+i, data_len-i);
             port[data_len-i] = 0;
 
+            if (!destination_allowed(allowed_destinations, data, port))
+            {
+                if (debug_level >= DEBUG_LEVEL1)
+                    printf("Connection to %s:%s denied\n", data, port);
+                msg_send_msg(from, next_client_id, MSG_TYPE_GOODBYE, NULL, 0);
+                return -2;
+            }
+            
             /* Create an unconnected TCP socket for the remote host, the
                client itself, add it to the list of clients */
             tcp_sock = sock_create(data, port, ipver, SOCK_TYPE_TCP, 0, 0);
@@ -384,6 +431,25 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
   error:
     return -1;
+}
+
+int destination_allowed(list_t *allowed_destinations,
+                        const char *host, const char *port)
+{
+    int i;
+
+    if (!allowed_destinations)
+        return 1;
+
+    for (i = 0; i < LIST_LEN(allowed_destinations); i++)
+    {
+        destination_t *dst = list_get_at(allowed_destinations, i);
+        if ((!dst->host || !strcmp(dst->host, host))
+             && (!dst->port || !strcmp(dst->port, port)))
+            return 1;
+    }
+
+    return 0;
 }
 
 void signal_handler(int sig)
