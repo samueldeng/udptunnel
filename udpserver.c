@@ -292,6 +292,8 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
     if(!c)
         return;
 
+    client_send_goodbye(c);
+    
     if(debug_level >= DEBUG_LEVEL1)
         printf("Client %d disconnected.\n", CLIENT_ID(c));
     
@@ -397,8 +399,9 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
         /* Can connect to TCP connection once received the Hello ACK */
         case MSG_TYPE_HELLOACK:
+            if(client_connect_tcp(c) != 0)
+                return -2;
             client_got_helloack(c);
-            client_connect_tcp(c);
             client_add_tcp_fd_to_set(c, client_fds);
             break;
 
