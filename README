@@ -36,26 +36,42 @@ WS2_32.Lib is specified correctly fo the LIBS variable.
 -----------------------------------------------------------------------------
 2.) Running
 
-usage: ./udptunnel -<s|c> [-6] <args>
+usage: ./udptunnel [-v] [-6] <-s|-c> <args>
   -c    client mode (default)
         <args>: [local host] <local port> <proxy host> <proxy port>
                 <remote host> <remote port>
   -s    server mode
-        <args>: [host] port [[host]:[port] ...]
+        <args>: [host] port [acl ...]
+        acl: [s=<src ip>,][d=<dst ip>,][dp=<dst port>,][a=allow|deny]
   -6    use IPv6
+  -v    show some debugging output (use up to 3 for increaing levels)
   -h    show this junks and exit
 
+
 To run the server:
-    udptunnel -s [-6] [host] port
+
+    udptunnel -s [-6] [host] port [acl ...]
+
 where the port is a UDP port to listen for messages from the udpclient and host
 is the address to listen on. Use the -6 option to listen on IPv6 addresses.
-Examples: 
-    udpserver -s 4444
-    udpserver -s -6 2001::10:3 4444
+
+After the port, the rest of the arguments are the access control list, with
+comma-separated parameters for each entry. Access can be control based on the
+source IP, destination IP, source port, and destination port. A catch-all
+entry is added at the end of every list that allows everything. To deny anything
+that doesn't match your entries, put "a=deny" as the last entry.
+
+Server Examples:
+    udptunnel -s 4444
+    udptunnel -s -6 2001::10:3 4444
+    udptunnel -s 4444 d=10.0.0.1,dport=80,a=deny dport=80,a=allow a=deny
+
 
 To run the client:
+
     udptunnel -c [-6] [local host] <local port> <proxy host> <proxy port>
             <remote host> <remote port>
+
 local host/port - Host and port for the TCP server to listen on. If the host
                   isn't supplied, it will listen on all available addresses.
 proxy host/port - Host and port that udpserver is listening on.
@@ -70,12 +86,6 @@ addresses 192.168.1.2 (client) and 192.168.1.1 (server):
     server# ./udptunnel -s 192.168.1.1 4444
     client# ./udptunnel -c 127.0.0.1 3333 192.168.1.1 4444 127.0.0.1 22
     client# ssh -p 3333 user@127.0.0.1
-
-Specified destination list:
-After the args in server mode, a list of hosts and ports can be included to
-control who the client tries to connect to. Current this doesn't work with IPv6
-and no names are translated yet, so the destination host used in the client
-must be the same string as that used in the list.
 
 This code has been tested and works on Linux, Solaris 10 x86, and Cygwin (but
 requires the IPv6 extension - http://win6.jp/Cygwin/index.html). Please send

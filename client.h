@@ -62,6 +62,8 @@ typedef struct client
 } client_t;
 
 #define CLIENT_ID(c) ((c)->id)
+#define CLIENT_UDP_SOCK(c) ((c)->udp_sock)
+#define CLIENT_TCP_SOCK(c) ((c)->tcp_sock)
 
 client_t *client_create(uint16_t id, socket_t *tcp_sock, socket_t *udp_sock,
                         int connected);

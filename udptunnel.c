@@ -48,13 +48,13 @@ int main(int argc, char *argv[])
     ret = WSAStartup(MAKEWORD(2,0), &wsa_data);
     ERROR_GOTO(ret != 0, "WSAStartup() failed", error);
 #endif
-    
+
     while((ret = getopt(argc, argv, "hscv6")) != EOF)
     {
         switch(ret)
         {
             case '6':
-                ipver = SOCK_IPV6;;
+                ipver = SOCK_IPV6;
                 break;
                 
             case 's':
@@ -105,12 +105,13 @@ int main(int argc, char *argv[])
 
 void usage(char *progname)
 {
-    printf("usage: %s -<s|c> [-6] <args>\n", progname);
+    printf("usage: %s [-v] [-6] <-s|-c> <args>\n", progname);
     printf("  -c    client mode (default)\n"
            "        <args>: [local host] <local port> <proxy host> <proxy port>\n"
            "                <remote host> <remote port>\n"
            "  -s    server mode\n"
-           "        <args>: [host] port [[host]:[port] ...]\n"
+           "        <args>: [host] port [acl ...]\n"
+           "        acl: [s=<src ip>,][d=<dst ip>,][dp=<dst port>,][a=allow|deny]\n"
            "  -6    use IPv6\n"
            "  -v    show some debugging output (use up to 3 for increaing levels)\n"
            "  -h    show this junks and exit\n");

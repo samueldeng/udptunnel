@@ -37,7 +37,7 @@
 #include "client.h"
 #include "message.h"
 #include "socket.h"
-#include "destination.h"
+#include "acl.h"
 
 extern int debug_level;
 extern int ipver;
@@ -48,9 +48,7 @@ static int next_client_id = 1;
 static int handle_message(uint16_t id, uint8_t msg_type, char *data,
                           int data_len, socket_t *from, list_t *clients,
                           fd_set *client_fds,
-                          list_t *allowed_destinations);
-static int destination_allowed(list_t *allowed_destinations,
-                               const char *host, const char *port);
+                          list_t *acls);
 static void disconnect_and_remove_client(uint16_t id, list_t *clients,
                                          fd_set *fds);
 static void signal_handler(int sig);
@@ -66,7 +64,7 @@ int udpserver(int argc, char *argv[])
     char addrstr[ADDRSTRLEN];
     
     list_t *clients = NULL;
-    list_t *allowed_destinations = NULL;
+    list_t *acls = NULL;
     socket_t *udp_sock = NULL;
     socket_t *udp_from = NULL;
     char data[MSG_MAX_LEN];
@@ -75,6 +73,7 @@ int udpserver(int argc, char *argv[])
     uint16_t tmp_id;
     uint8_t tmp_type;
     uint16_t tmp_len;
+    acl_t *tmp_acl;
     
     struct timeval curr_time;
     struct timeval timeout;
@@ -85,58 +84,73 @@ int udpserver(int argc, char *argv[])
     int num_fds;
 
     int i;
-    int allowed_start;
     int ret;
 
     signal(SIGINT, &signal_handler);
 
-    /* Scan for start of allowed destination parameters */
-    allowed_start = argc;
-    for (i = 0; i < argc; i++)
-      if (strchr(argv[i], ':'))
-      {
-          allowed_start = i;
-          break;
-      }
-
-    /* Get the port and address to listen on from command line */
-    if(allowed_start == 1)
+    if(argc == 1) /* only port specified */
     {
+        ERROR_GOTO(!isnum(argv[0]), "invalid port format", done);
         strncpy(port_str, argv[0], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
         host_str[0] = 0;
     }
-    else if(allowed_start == 2)
+    else
     {
-        strncpy(host_str, argv[0], sizeof(host_str));
-        strncpy(port_str, argv[1], sizeof(port_str));
-        host_str[sizeof(host_str)-1] = 0;
+        /* first arg will be host IP if it's not the port */
+        if(!isnum(argv[0]))
+        {
+            ERROR_GOTO(!isipaddr(argv[0], ipver),
+                       "invalid IP address format", done);
+            strncpy(host_str, argv[0], sizeof(host_str));
+            host_str[sizeof(host_str)-1] = 0;
+            argv++;
+            argc--;
+        }
+        else
+        {
+            host_str[0] = 0;
+        }
+
+        /* next arg will be the port */
+        ERROR_GOTO(!isnum(argv[0]), "invalid port format", done);
+        strncpy(port_str, argv[0], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
+        argv++;
+        argc--;
     }
 
-    /* Build allowed destination list */
-    if (allowed_start < argc)
+    /* create empty unsorted acl list */
+    acls = list_create(sizeof(acl_t), NULL, NULL, p_acl_free, 0);
+    ERROR_GOTO(acls == NULL, "creating acl list", done);
+
+    for(i = 0; i < argc; i++)
     {
-        allowed_destinations = list_create(sizeof(destination_t),
-                                           p_destination_cmp,
-                                           p_destination_copy,
-                                           p_destination_free);
-        if (!allowed_destinations)
-            goto done;
-        for (i = allowed_start; i < argc; i++)
+        tmp_acl = acl_create(argv[i], ipver);
+        ERROR_GOTO(tmp_acl == NULL, "creating acl", done);
+        list_add(acls, tmp_acl, 0);
+
+        if(debug_level >= DEBUG_LEVEL2)
         {
-            destination_t *dst = destination_create(argv[i]);
-            if (!dst)
-                goto done;
-            if (!list_add(allowed_destinations, dst))
-                goto done;
-            destination_free(dst);
+            printf("adding acl entry: ");
+            acl_print(tmp_acl);
         }
     }
 
+    /* add ALLOW ALL entry at end of list */
+    tmp_acl = acl_create(ACL_DEFAULT, ipver);
+    ERROR_GOTO(tmp_acl == NULL, "creating acl", done);
+    list_add(acls, tmp_acl, 0);
+
+    if(debug_level >= DEBUG_LEVEL2)
+    {
+        printf("adding acl entry: ");
+        acl_print(tmp_acl);
+    }
+    
     /* Create an empty list for the clients */
     clients = list_create(sizeof(client_t), p_client_cmp, p_client_copy,
-                          p_client_free);
+                          p_client_free, 1);
     if(!clients)
         goto done;
 
@@ -218,8 +232,7 @@ int udpserver(int argc, char *argv[])
             
             if(ret == 0)
                 ret = handle_message(tmp_id, tmp_type, data, tmp_len,
-                                     udp_from, clients, &client_fds,
-                                     allowed_destinations);
+                                     udp_from, clients, &client_fds, acls);
             if(ret == -2)
                 disconnect_and_remove_client(tmp_id, clients, &client_fds);
 
@@ -260,8 +273,8 @@ int udpserver(int argc, char *argv[])
   done:
     if(debug_level >= DEBUG_LEVEL1)
         printf("Cleaning up...\n");
-    if(allowed_destinations)
-        list_free(allowed_destinations);
+    if(acls)
+        list_free(acls);
     if(clients)
         list_free(clients);
     if(udp_sock)
@@ -309,7 +322,7 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
  */
 int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
                    socket_t *from, list_t *clients, fd_set *client_fds,
-                   list_t *allowed_destinations)
+                   list_t *acls)
 {
     client_t *c = NULL;
     client_t *c2 = NULL;
@@ -339,7 +352,9 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
         {
             int i;
             char port[6]; /* need this so port str can have null term. */
-            char addrstr[ADDRSTRLEN];
+            char src_addrstr[ADDRSTRLEN];
+            char dst_addrstr[ADDRSTRLEN];
+            uint16_t sport, dport;
             uint16_t req_id;
             
             if(id != 0)
@@ -360,14 +375,6 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             data[i++] = 0;
             strncpy(port, data+i, data_len-i);
             port[data_len-i] = 0;
-
-            if (!destination_allowed(allowed_destinations, data, port))
-            {
-                if (debug_level >= DEBUG_LEVEL1)
-                    printf("Connection to %s:%s denied\n", data, port);
-                msg_send_msg(from, next_client_id, MSG_TYPE_GOODBYE, NULL, 0);
-                return -2;
-            }
             
             /* Create an unconnected TCP socket for the remote host, the
                client itself, add it to the list of clients */
@@ -378,15 +385,48 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
             sock_free(tcp_sock);
             ERROR_GOTO(c == NULL, "Error creating client", error);
 
-            c2 = list_add(clients, c);
+            c2 = list_add(clients, c, 1);
             ERROR_GOTO(c2 == NULL, "Error adding client to list", error);
 
+            sock_get_addrstr(CLIENT_UDP_SOCK(c2), src_addrstr,
+                             sizeof(src_addrstr));
+            sock_get_addrstr(CLIENT_TCP_SOCK(c2), dst_addrstr,
+                             sizeof(dst_addrstr));
+            sport = sock_get_port(CLIENT_UDP_SOCK(c2));
+            dport = sock_get_port(CLIENT_TCP_SOCK(c2));
+
+            for(i = 0; i < LIST_LEN(acls); i++)
+            {
+                ret = acl_action(list_get_at(acls, i), src_addrstr, sport,
+                                 dst_addrstr, dport);
+
+                if(ret == ACL_ACTION_ALLOW)
+                {
+                    if(debug_level >= DEBUG_LEVEL2)
+                        printf("Connection %s:%hu -> %s:%hu allowed\n",
+                               src_addrstr, sport, dst_addrstr, dport);
+                    break;
+                }
+                else if(ret == ACL_ACTION_DENY)
+                {
+                    if(debug_level >= DEBUG_LEVEL2)
+                        printf("Connection to %s:%hu -> %s:%hu denied\n",
+                               src_addrstr, sport, dst_addrstr, dport);
+
+                    msg_send_msg(from, next_client_id, MSG_TYPE_GOODBYE,
+                                 NULL, 0);
+                    return -2;
+                }
+            }
+            
             if(debug_level >= DEBUG_LEVEL1)
             {
-                sock_get_str(c2->udp_sock, addrstr, sizeof(addrstr));
-                printf("New connection(%d): udp://%s", CLIENT_ID(c2), addrstr);
-                sock_get_str(c2->tcp_sock, addrstr, sizeof(addrstr));
-                printf(" -> tcp://%s\n", addrstr);
+                sock_get_str(CLIENT_UDP_SOCK(c2), src_addrstr,
+                             sizeof(src_addrstr));
+                sock_get_str(CLIENT_TCP_SOCK(c2), dst_addrstr,
+                             sizeof(dst_addrstr));
+                printf("New connection(%d): udp://%s -> tcp://%s\n",
+                       CLIENT_ID(c2), src_addrstr, dst_addrstr);
             }
             
             /* Send the Hello ACK message if created client successfully */
@@ -434,25 +474,6 @@ int handle_message(uint16_t id, uint8_t msg_type, char *data, int data_len,
 
   error:
     return -1;
-}
-
-int destination_allowed(list_t *allowed_destinations,
-                        const char *host, const char *port)
-{
-    int i;
-
-    if (!allowed_destinations)
-        return 1;
-
-    for (i = 0; i < LIST_LEN(allowed_destinations); i++)
-    {
-        destination_t *dst = list_get_at(allowed_destinations, i);
-        if ((!dst->host || !strcmp(dst->host, host))
-             && (!dst->port || !strcmp(dst->port, port)))
-            return 1;
-    }
-
-    return 0;
 }
 
 void signal_handler(int sig)

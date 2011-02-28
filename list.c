@@ -31,7 +31,7 @@
 list_t *list_create(int obj_sz,
                     int (*obj_cmp)(const void *, const void *, size_t),
                     void* (*obj_copy)(void *, const void *, size_t),
-                    void (*obj_free)(void *))
+                    void (*obj_free)(void *), int sort)
 {
     list_t *new;
 
@@ -49,6 +49,7 @@ list_t *list_create(int obj_sz,
     new->obj_sz = obj_sz;
     new->num_objs = 0;
     new->length = LIST_INIT_SIZE;
+    new->sort = sort;
     new->obj_cmp = obj_cmp ? obj_cmp : &memcmp;
     new->obj_copy = obj_copy ? obj_copy : &memcpy;
     new->obj_free = obj_free ? obj_free : &free;
@@ -57,11 +58,12 @@ list_t *list_create(int obj_sz,
 }
 
 /*
- * Inserts a new object into the list in sorted order. It makes a deep copy
- * of the object and returns a pointer to that new object if obj wasn't
- * already in the list, or a pointer to the object already in the list.
+ * Inserts a new object into the list in sorted order (if set). If specified,
+ * makes a deep copy of the object and returns a pointer to that new object if
+ * obj wasn't already in the list, or a pointer to the object already in the
+ * list.
  */
-void *list_add(list_t *list, void *obj)
+void *list_add(list_t *list, void *obj, int copy)
 {
     void *o;
     void **new_arr;
@@ -73,11 +75,18 @@ void *list_add(list_t *list, void *obj)
     if(o)
         return o;
 
-    o = malloc(list->obj_sz);
-    if(!o)
-        return NULL;
+    if(copy == 1)
+    {
+        o = malloc(list->obj_sz);
+        if(o == NULL)
+            return NULL;
 
-    list->obj_copy(o, obj, list->obj_sz);
+        list->obj_copy(o, obj, list->obj_sz);
+    }
+    else
+    {
+        o = obj;
+    }
 
     /* Resize the object array if needed, doubling the size */
     if(list->num_objs == list->length)
@@ -96,18 +105,21 @@ void *list_add(list_t *list, void *obj)
     /* Insert new object at end of array */
     list->obj_arr[list->num_objs++] = o;
 
-    /* Move object up in array until list is sorted again */
-    for(i = list->num_objs-1; i > 0; i--)
+    if(list->sort == 1)
     {
-        if(list->obj_cmp(list->obj_arr[i-1], list->obj_arr[i],
-                         list->obj_sz) > 0)
+        /* Move object up in array until list is sorted again */
+        for(i = list->num_objs-1; i > 0; i--)
         {
-            temp = list->obj_arr[i-1];
-            list->obj_arr[i-1] = list->obj_arr[i];
-            list->obj_arr[i] = temp;
+            if(list->obj_cmp(list->obj_arr[i-1], list->obj_arr[i],
+                             list->obj_sz) > 0)
+            {
+                temp = list->obj_arr[i-1];
+                list->obj_arr[i-1] = list->obj_arr[i];
+                list->obj_arr[i] = temp;
+            }
+            else
+                break; /* since was sorted before, just need to go this far */
         }
-        else
-            break; /* since list was sorted before, just need to go this far */
     }
     
     return o;
