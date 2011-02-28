@@ -31,10 +31,11 @@
 #include <ws2tcpip.h>
 #endif /*WIN32*/
 
+#include <string.h>
 #include "common.h"
 
 #define BACKLOG 10
-#define ADDRSTRLEN (INET6_ADDRSTRLEN + 7)
+#define ADDRSTRLEN (INET6_ADDRSTRLEN + 9)
 
 #define SOCK_TYPE_TCP 1
 #define SOCK_TYPE_UDP 2
@@ -60,14 +61,27 @@ socket_t *sock_create(char *host, char *port, int ipver, int sock_type,
 socket_t *sock_copy(socket_t *sock);
 int sock_connect(socket_t *sock, int is_serv);
 socket_t *sock_accept(socket_t *serv);
-int sock_addr_equal(socket_t *s1, socket_t *s2);
 void sock_close(socket_t *s);
 void sock_free(socket_t *s);
+
+int sock_addr_equal(socket_t *s1, socket_t *s2);
+int sock_ipaddr_cmp(socket_t *s1, socket_t *s2);
+int sock_port_cmp(socket_t *s1, socket_t *s2);
 
 char *sock_get_str(socket_t *s, char *buf, int len);
 char *sock_get_addrstr(socket_t *s, char *buf, int len);
 uint16_t sock_get_port(socket_t *s);
 int sock_recv(socket_t *sock, socket_t *from, char *data, int len);
 int sock_send(socket_t *to, char *data, int len);
+int isipaddr(char *ip, int ipver);
+
+static int _inline_ isaddrzero(void *addr, int len)
+{
+    struct in6_addr zaddr = IN6ADDR_ANY_INIT;
+
+    if(memcmp(addr, &zaddr, MIN(len, sizeof(zaddr))) == 0)
+        return 1;
+    return 0;
+}
 
 #endif /* SOCKET_H */

@@ -23,8 +23,14 @@ OS=LINUX
 #OS=SOLARIS
 #OS=CYGWIN
 
+# Uncomment to build 32-bit binary (if on 64-bit system)
+#M32=-m32
+
+# Uncomment to build with debugging symbols
+#DEBUG=-g
+
 CC=gcc
-CFLAGS=-Wall -Wshadow -Wpointer-arith -Wwrite-strings -D ${OS}
+CFLAGS=-Wall -Wshadow -Wpointer-arith -Wwrite-strings ${M32} ${DEBUG} -D ${OS}
 
 ifeq (${OS}, SOLARIS)
 LDFLAGS=-lnsl -lsocket -lresolv
@@ -35,9 +41,10 @@ all: udptunnel
 #
 # Main program
 #
-OBJS=socket.o message.o client.o list.o destination.o udpserver.o udpclient.o
+OBJS=socket.o message.o client.o list.o acl.o udpserver.o udpclient.o
 udptunnel: udptunnel.c ${OBJS}
 	${CC} ${CFLAGS} -o udptunnel udptunnel.c ${OBJS} ${LDFLAGS}
+	strip udptunnel
 
 #
 # Supporting code
@@ -46,9 +53,9 @@ list.o: list.c list.h common.h
 socket.o: socket.c socket.h common.h
 client.o: client.c client.h common.h
 message.o: message.c message.h common.h
-destination.o: destination.c destination.h
+acl.o: acl.c acl.h common.h
 udpclient.o: udpclient.c list.h socket.h client.h message.h common.h
-udpserver.o: udpserver.c list.h socket.h client.h message.h destination.h common.h
+udpserver.o: udpserver.c list.h socket.h client.h message.h acl.h common.h
 
 #
 # Clean compiled and temporary files

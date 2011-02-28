@@ -199,17 +199,6 @@ socket_t *sock_accept(socket_t *serv)
 }
 
 /*
- * Returns non zero if IP addresses and ports are same, or 0 if not.
- */
-int sock_addr_equal(socket_t *s1, socket_t *s2)
-{
-    if(s1->addr_len != s2->addr_len)
-        return 0;
-    
-    return (memcmp(&s1->addr, &s2->addr, s1->addr_len) == 0);
-}
-
-/*
  * Closes the file descriptor for the socket.
  */
 void sock_close(socket_t *s)
@@ -234,6 +223,76 @@ void sock_free(socket_t *s)
 }
 
 /*
+ * Returns non zero if IP addresses and ports are same, or 0 if not.
+ */
+int sock_addr_equal(socket_t *s1, socket_t *s2)
+{
+    if(s1->addr_len != s2->addr_len)
+        return 0;
+    
+    return (memcmp(&s1->addr, &s2->addr, s1->addr_len) == 0);
+}
+
+/*
+ * Compares only the IP address of two sockets
+ */
+int sock_ipaddr_cmp(socket_t *s1, socket_t *s2)
+{
+    char *a1;
+    char *a2;
+    int len;
+    
+    if(s1->addr.ss_family != s2->addr.ss_family)
+        return 0; /* ? */
+
+    switch(s1->addr.ss_family)
+    {
+        case AF_INET:
+            a1 = (char *)(&SIN(&s1->addr)->sin_addr);
+            a2 = (char *)(&SIN(&s2->addr)->sin_addr);
+            len = 4; /* 32 bits */
+            
+        case AF_INET6:
+            a1 = (char *)(&SIN6(&s1->addr)->sin6_addr);
+            a2 = (char *)(&SIN6(&s2->addr)->sin6_addr);
+            len = 16; /* 128 bits */
+
+        default:
+            return 0; /* ? */
+    }
+
+    return memcmp(a1, a2, len);
+}
+
+/*
+ * Compares only the ports of two sockets
+ */
+int sock_port_cmp(socket_t *s1, socket_t *s2)
+{
+    uint16_t p1;
+    uint16_t p2;
+
+    if(s1->addr.ss_family != s2->addr.ss_family)
+        return 0; /* ? */
+    
+    switch(s1->addr.ss_family)
+    {
+        case AF_INET:
+            p1 = ntohs(SIN(&s1->addr)->sin_port);
+            p2 = ntohs(SIN(&s2->addr)->sin_port);
+            
+        case AF_INET6:
+            p1 = ntohs(SIN6(&s1->addr)->sin6_port);
+            p2 = ntohs(SIN6(&s2->addr)->sin6_port);
+            
+        default:
+            return 0; /* ? */
+    }
+
+    return p1 - p2;
+}
+
+/*
  * Gets the string representation of the IP address and port from addr. Will
  * store result in buf, which len must be at least INET6_ADDRLEN + 6. Returns a
  * pointer to buf. String will be in the form of "ip_address:port".
@@ -250,7 +309,7 @@ char *sock_get_str(socket_t *s, char *buf, int len)
 {
     void *src_addr;
     char addr_str[INET6_ADDRSTRLEN];
-    unsigned short port;
+    uint16_t port;
     
     switch(s->addr.ss_family)
     {
@@ -272,8 +331,9 @@ char *sock_get_str(socket_t *s, char *buf, int len)
                  addr_str, sizeof(addr_str)) == NULL)
         return NULL;
 
-    snprintf(buf, len, "%s:%hu", addr_str, port);
-    
+    snprintf(buf, len, (s->addr.ss_family == AF_INET6) ? "[%s]:%hu" : "%s:%hu",
+             addr_str, port);
+
     return buf;
 }
 #endif /*WIN32*/
@@ -329,11 +389,10 @@ uint16_t sock_get_port(socket_t *s)
     switch(s->addr.ss_family)
     {
         case AF_INET:
-            return (uint16_t)ntohs(((struct sockaddr_in *)&s->addr)->sin_port);
+            return (uint16_t)ntohs(SIN(&s->addr)->sin_port);
 
         case AF_INET6:
-            return (uint16_t)
-                ntohs(((struct sockaddr_in6 *)&s->addr)->sin6_port);
+            return (uint16_t)ntohs(SIN6(&s->addr)->sin6_port);
     }
 
     return 0;
@@ -433,6 +492,24 @@ int sock_send(socket_t *to, char *data, int len)
     return -1;
 }
 
+/*
+ * Checks validity of an IP address string based on the version
+ */
+int isipaddr(char *ip, int ipver)
+{
+    char addr[sizeof(struct in6_addr)];
+
+    if(inet_pton(((ipver == SOCK_IPV6) ? AF_INET6 : AF_INET), ip, addr) == 1)
+        return 1;
+
+    return 0;
+}
+
+/*
+ * Debugging function to print a hexdump of data with ascii, for example:
+ * 00000000  74 68 69 73 20 69 73 20  61 20 74 65 73 74 20 6d  this is  a test m
+ * 00000010  65 73 73 61 67 65 2e 20  62 6c 61 68 2e 00        essage.  blah..
+ */
 void print_hexdump(char *data, int len)
 {
     int line;

@@ -23,6 +23,7 @@
 #define COMMON_H
 
 #include <stdio.h>
+#include <ctype.h>
 
 #define NO_DEBUG     0
 #define DEBUG_LEVEL1 1
@@ -62,7 +63,7 @@ typedef unsigned int uint32_t;
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
 #ifdef SOLARIS
-/* Copied from sys/time.h on linux system since solaris system that tried to
+/* Copied from sys/time.h on linux system since solaris system that I tried to
  * compile on didn't have timeradd macro. */
 #define timeradd(a, b, result)                                                \
     do {                                                                      \
@@ -75,5 +76,16 @@ typedef unsigned int uint32_t;
         }                                                                     \
     } while (0)
 #endif /* SOLARIS */
+
+static _inline_ int isnum(char *s)
+{
+    for(; *s != '\0'; s++)
+    {
+        if(!isdigit(*s))
+            return 0;
+    }
+
+    return 1;
+}
 
 #endif /* COMMON_H */

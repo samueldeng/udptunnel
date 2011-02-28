@@ -31,7 +31,7 @@ typedef struct list {
     size_t obj_sz;  /* Number of bytes each individual objects takes up */
     int num_objs;   /* Number of object pointers in the array */
     int length;     /* Actual length of the pointer array */
-
+    int sort;       /* 0 - don't sort, 1 - keep sorted */
     /* Function pointers to use for specific type of data types */
     int (*obj_cmp)(const void *, const void *, size_t);
     void* (*obj_copy)(void *, const void *, size_t);
@@ -43,8 +43,8 @@ typedef struct list {
 list_t *list_create(int obj_sz,
                     int (*obj_cmp)(const void *, const void *, size_t),
                     void* (*obj_copy)(void *, const void *, size_t),
-                    void (*obj_free)(void *));
-void *list_add(list_t *list, void *obj);
+                    void (*obj_free)(void *), int sort);
+void *list_add(list_t *list, void *obj, int copy);
 void *list_get(list_t *list, void *obj);
 void *list_get_at(list_t *list, int i);
 int list_get_index(list_t *list, void *obj);

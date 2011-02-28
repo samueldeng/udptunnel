@@ -54,7 +54,7 @@ static void signal_handler(int sig);
 int udpclient(int argc, char *argv[])
 {
     char *lhost, *lport, *phost, *pport, *rhost, *rport;
-    list_t *clients;
+    list_t *clients = NULL;
     list_t *conn_clients;
     client_t *client;
     client_t *client2;
@@ -89,17 +89,22 @@ int udpclient(int argc, char *argv[])
     rhost = argv[i++];
     rport = argv[i++];
 
+    /* Check validity of ports (can't check ip's b/c might be host names) */
+    ERROR_GOTO(!isnum(lport), "Invalid local port.", done);
+    ERROR_GOTO(!isnum(pport), "Invalid proxy port.", done);
+    ERROR_GOTO(!isnum(rport), "Invalid remote port.", done);
+    
     srand(time(NULL));
     next_req_id = rand() % 0xffff;
     
     /* Create an empty list for the clients */
     clients = list_create(sizeof(client_t), p_client_cmp, p_client_copy,
-                          p_client_free);
+                          p_client_free, 1);
     ERROR_GOTO(clients == NULL, "Error creating clients list.", done);
 
     /* Create and empty list for the connecting clients */
     conn_clients = list_create(sizeof(client_t), p_client_cmp, p_client_copy,
-                               p_client_free);
+                               p_client_free, 1);
     ERROR_GOTO(conn_clients == NULL, "Error creating clients list.", done);
 
     /* Create a TCP server socket to listen for incoming connections */
@@ -169,9 +174,16 @@ int udpclient(int argc, char *argv[])
            and UDP connection if one is ready */
         if(FD_ISSET(SOCK_FD(tcp_serv), &read_fds))
         {
-            tcp_sock = sock_accept(tcp_serv);            
-            udp_sock = sock_create(phost, pport, ipver,
-                                   SOCK_TYPE_UDP, 0, 1);
+            tcp_sock = sock_accept(tcp_serv);
+            if(tcp_sock == NULL)
+                continue;
+            udp_sock = sock_create(phost, pport, ipver, SOCK_TYPE_UDP, 0, 1);
+            if(udp_sock == NULL)
+            {
+                sock_close(tcp_sock);
+                sock_free(tcp_sock);
+                continue;
+            }
 
             client = client_create(next_req_id++, tcp_sock, udp_sock, 1);
             if(!client || !tcp_sock || !udp_sock)
@@ -183,7 +195,7 @@ int udpclient(int argc, char *argv[])
             }
             else
             {
-                client2 = list_add(conn_clients, client);
+                client2 = list_add(conn_clients, client, 1);
                 client_free(client);
                 client = NULL;
                 
@@ -223,7 +235,7 @@ int udpclient(int argc, char *argv[])
                 }
                 else
                 {
-                    client = list_add(clients, client);
+                    client = list_add(clients, client, 1);
                     list_delete_at(conn_clients, i);
                     client_remove_udp_fd_from_set(client, &read_fds);
                     i--;
