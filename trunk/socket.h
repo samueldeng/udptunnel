@@ -44,6 +44,7 @@
 
 #define SIN(sa) ((struct sockaddr_in *)sa)
 #define SIN6(sa) ((struct sockaddr_in6 *)sa)
+#define PADDR(a) ((struct sockaddr *)a)
 
 typedef struct socket {
     int fd;                       /* Socket file descriptor to send/recv on */
@@ -54,7 +55,8 @@ typedef struct socket {
 
 #define SOCK_FD(s) ((s)->fd)
 #define SOCK_LEN(s) ((s)->addr_len)
-#define SOCK_ADDR(s) ((struct sockaddr *)&(s)->addr)
+#define SOCK_PADDR(s) ((struct sockaddr *)&(s)->addr)
+#define SOCK_TYPE(s) ((s)->type)
 
 socket_t *sock_create(char *host, char *port, int ipver, int sock_type,
                       int is_serv, int conn);
@@ -63,11 +65,10 @@ int sock_connect(socket_t *sock, int is_serv);
 socket_t *sock_accept(socket_t *serv);
 void sock_close(socket_t *s);
 void sock_free(socket_t *s);
-
 int sock_addr_equal(socket_t *s1, socket_t *s2);
 int sock_ipaddr_cmp(socket_t *s1, socket_t *s2);
 int sock_port_cmp(socket_t *s1, socket_t *s2);
-
+int sock_isaddrany(socket_t *s);
 char *sock_get_str(socket_t *s, char *buf, int len);
 char *sock_get_addrstr(socket_t *s, char *buf, int len);
 uint16_t sock_get_port(socket_t *s);
@@ -75,13 +76,10 @@ int sock_recv(socket_t *sock, socket_t *from, char *data, int len);
 int sock_send(socket_t *to, char *data, int len);
 int isipaddr(char *ip, int ipver);
 
-static int _inline_ isaddrzero(void *addr, int len)
+static int _inline_ sock_get_ipver(socket_t *s)
 {
-    struct in6_addr zaddr = IN6ADDR_ANY_INIT;
-
-    if(memcmp(addr, &zaddr, MIN(len, sizeof(zaddr))) == 0)
-        return 1;
-    return 0;
+    return (s->addr.ss_family == AF_INET) ? SOCK_IPV4 :
+        ((s->addr.ss_family == AF_INET6) ? SOCK_IPV6 : 0);
 }
 
 #endif /* SOCKET_H */

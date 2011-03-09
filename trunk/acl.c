@@ -24,11 +24,15 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include "acl.h"
 #include "socket.h"
+#include "acl.h"
 
 extern int debug_level;
 
+#ifdef WIN32
+char *strtok_r(char *s, const char *delim, char **save_ptr);
+#endif /*WIN32*/
+    
 /*
  * Creates an ACL entry given the line of the following format:
  *   s=src,d=dst,dp=dport,a=allow|deny
@@ -36,24 +40,26 @@ extern int debug_level;
  */
 acl_t *acl_create(char *acl_entry, int ipver)
 {
-    char *line = NULL;;
+    char *line = NULL;
     char *saveptr = NULL;
     char *tok;
     char *param, *arg;
-    int i, ret;
-
+    char *pdst = NULL;
+    char *psrc = NULL;
+    char *pdp = NULL;
+    char *psp = NULL;
+    int i;
     acl_t *acl = NULL;
 
     line = malloc(strlen(acl_entry) + 1);
     ERROR_GOTO(line == NULL, "Allocating memory error", error);
-    
+
     acl = calloc(1, sizeof(*acl));
     ERROR_GOTO(acl == NULL, "Allocating memory error", error);
 
     acl->action = ACL_ACTION_ALLOW;
-    acl->sa_type = (ipver == SOCK_IPV6) ? AF_INET6 : AF_INET;
-    strncpy(line, acl_entry, strlen(acl_entry));
-    
+    strncpy(line, acl_entry, strlen(acl_entry) + 1);
+
     /* go through line, getting each param=arg separated by a ',' */
     for(tok = strtok_r(line, ",", &saveptr);
         tok != NULL;
@@ -74,41 +80,25 @@ acl_t *acl_create(char *acl_entry, int ipver)
 
         if(strcmp(param, "s") == 0)
         {
-            ERROR_GOTO(!isaddrzero(acl->src, sizeof(acl->src)),
-                       "Source IP already specified", error);
-
-            ret = inet_pton(acl->sa_type, arg, acl->src);
-            ERROR_GOTO(ret != 1, "Couldn't convert IP", error);
+            ERROR_GOTO(psrc != NULL, "Source IP already specified", error);
+            psrc = arg;
         }
         else if(strcmp(param, "d") == 0)
         {
-            ERROR_GOTO(!isaddrzero(acl->dst, sizeof(acl->dst)),
-                       "Destination IP already specified", error);
-
-            ret = inet_pton(acl->sa_type, arg, acl->dst);
-            ERROR_GOTO(ret != 1, "Couldn't convert IP", error);
+            ERROR_GOTO(pdst != NULL, "Destination IP already specified", error);
+            pdst = arg;
         }
         else if(strcmp(param, "sp") == 0)
         {
-            ERROR_GOTO(acl->sport != 0, "Source port already specified",
-                       error);
+            ERROR_GOTO(psp != 0, "Source port already specified", error);
             ERROR_GOTO(!isnum(arg), "Invalid port format", error);
-
-            ret = atoi(arg);
-            ERROR_GOTO((ret & 0xffff0000) != 0, "Port out of range", error);
-
-            acl->sport = (uint16_t)ret;
+            psp = arg;
         }
         else if(strcmp(param, "dp") == 0)
         {
-            ERROR_GOTO(acl->dport != 0, "Destination port already specified",
-                       error);
+            ERROR_GOTO(pdp != 0, "Destination port already specified", error);
             ERROR_GOTO(!isnum(arg), "Invalid port format", error);
-
-            ret = atoi(arg);
-            ERROR_GOTO((ret & 0xffff0000) != 0, "Port out of range", error);
-
-            acl->dport = (uint16_t)ret;
+            pdp = arg;
         }
         else if(strcmp(param, "a") == 0)
         {
@@ -128,6 +118,12 @@ acl_t *acl_create(char *acl_entry, int ipver)
         }
     }
 
+    acl->src = sock_create(psrc, psp, ipver, SOCK_TYPE_TCP, 1, 0);
+    ERROR_GOTO(acl->src == NULL, "Couldn't create acl->src", error);
+
+    acl->dst = sock_create(pdst, pdp, ipver, SOCK_TYPE_TCP, 1, 0);
+    ERROR_GOTO(acl->dst == NULL, "Couldn't create acl->dst", error);
+    
     free(line);
 
     return acl;
@@ -136,7 +132,7 @@ acl_t *acl_create(char *acl_entry, int ipver)
     if(line)
         free(line);
     if(acl)
-        free(acl);
+        acl_free(acl);
     
     return NULL;
 }
@@ -146,6 +142,10 @@ acl_t *acl_create(char *acl_entry, int ipver)
  */
 void acl_free(acl_t *acl)
 {
+    if(acl->src)
+        sock_free(acl->src);
+    if(acl->dst)
+        sock_free(acl->dst);
     free(acl);
 }
 
@@ -154,39 +154,46 @@ void acl_free(acl_t *acl)
  */
 int acl_action(acl_t *acl, char *src, uint16_t sport, char *dst, uint16_t dport)
 {
-    struct in6_addr addr;
+    socket_t *s = NULL;
+    socket_t *d = NULL;
+    uint16_t p;
+    int ret;
+
+    ret = ACL_ACTION_NOMATCH;
     
-    if(acl->sport != 0)
-    {
-        if(acl->sport != sport)
-            return ACL_ACTION_NOMATCH;
-    }
+    s = sock_create(src, NULL, sock_get_ipver(acl->src),
+                    SOCK_TYPE(acl->src), 0, 0);
+    if(s == NULL)
+        goto done;
 
-    if(acl->dport != 0)
-    {
-        if(acl->dport != dport)
-            return ACL_ACTION_NOMATCH;
-    }
+    d = sock_create(dst, NULL, sock_get_ipver(acl->dst),
+                    SOCK_TYPE(acl->dst), 0, 0);
+    if(d == NULL)
+        goto done;
 
-    if(!isaddrzero(acl->src, sizeof(acl->src)))
-    {
-        memset(&addr, 0, sizeof(addr));
+    p = sock_get_port(acl->src);
+    if(p != 0 && p != sport)
+        goto done;
 
-        if(inet_pton(acl->sa_type, src, &addr) != 1 ||
-           memcmp(acl->src, &addr, sizeof(addr)) != 0)
-            return ACL_ACTION_NOMATCH;
-    }
+    p = sock_get_port(acl->dst);
+    if(p != 0 && p != dport)
+        goto done;
 
-    if(!isaddrzero(acl->dst, sizeof(acl->dst)))
-    {
-        memset(&addr, 0, sizeof(addr));
+    if(!sock_isaddrany(acl->src) && sock_ipaddr_cmp(acl->src, s) != 0)
+        goto done;
 
-        if(inet_pton(acl->sa_type, dst, &addr) != 1 ||
-           memcmp(acl->dst, &addr, sizeof(addr)) != 0)
-            return ACL_ACTION_NOMATCH;
-    }
+    if(!sock_isaddrany(acl->dst) && sock_ipaddr_cmp(acl->dst, d) != 0)
+        goto done;
+
+    ret = acl->action;
     
-    return acl->action;
+  done:
+    if(s)
+        sock_free(s);
+    if(d)
+        sock_free(d);
+    
+    return ret;
 }
 
 /*
@@ -194,26 +201,29 @@ int acl_action(acl_t *acl, char *src, uint16_t sport, char *dst, uint16_t dport)
  */
 void acl_print(acl_t *acl)
 {
-    struct in6_addr zaddr = IN6ADDR_ANY_INIT;
     char addr_str[ADDRSTRLEN];
+    int len;
+    uint16_t port;
     
-    if(memcmp(acl->src, &zaddr, sizeof(zaddr)) != 0)
+    len = sizeof(addr_str);
+
+    if(!sock_isaddrany(acl->src))
     {
-        inet_ntop(acl->sa_type, acl->src, addr_str, sizeof(addr_str));
+        sock_get_addrstr(acl->src, addr_str, len);
         printf("s=%s,", addr_str);
     }
 
-    if(acl->sport != 0)
-        printf("sp=%hu,", acl->sport);
-    
-    if(memcmp(acl->dst, &zaddr, sizeof(zaddr)) != 0)
+    if((port = sock_get_port(acl->src)) != 0)
+        printf("sp=%hu,", port);
+
+    if(!sock_isaddrany(acl->dst))
     {
-        inet_ntop(acl->sa_type, acl->dst, addr_str, sizeof(addr_str));
+        sock_get_addrstr(acl->dst, addr_str, len);
         printf("d=%s,", addr_str);
     }
 
-    if(acl->dport != 0)
-        printf("dp=%hu,", acl->dport);
+    if((port = sock_get_port(acl->dst)) != 0)
+        printf("dp=%hu,", port);
 
     switch(acl->action)
     {
@@ -230,3 +240,43 @@ void acl_print(acl_t *acl)
             break;
     }
 }
+
+/*
+ * strtok_r code directly from glibc.git /string/strtok_r.c since windows
+ * doesn't have it.
+ */
+#ifdef WIN32
+char *strtok_r(char *s, const char *delim, char **save_ptr)
+{
+    char *token;
+    
+    if(s == NULL)
+        s = *save_ptr;
+    
+    /* Scan leading delimiters.  */
+    s += strspn(s, delim);
+    if(*s == '\0')
+    {
+        *save_ptr = s;
+        return NULL;
+    }
+    
+    /* Find the end of the token.  */
+    token = s;
+    s = strpbrk(token, delim);
+    
+    if(s == NULL)
+    {
+        /* This token finishes the string.  */
+        *save_ptr = strchr(token, '\0');
+    }
+    else
+    {
+        /* Terminate the token and make *SAVE_PTR point past it.  */
+        *s = '\0';
+        *save_ptr = s + 1;
+    }
+    
+    return token;
+}
+#endif /* WIN32 */

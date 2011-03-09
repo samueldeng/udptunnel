@@ -35,12 +35,9 @@
 #define ACL_DEFAULT ((char *)"a=allow")
 
 typedef struct acl {
-    char src[sizeof(struct in6_addr)];
-    char dst[sizeof(struct in6_addr)];
-    uint16_t sport;
-    uint16_t dport;
+    socket_t *src;
+    socket_t *dst;
     int action;
-    sa_family_t sa_type;
 } acl_t;
 
 acl_t *acl_create(char *acl_entry, int ipver);

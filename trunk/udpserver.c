@@ -94,6 +94,8 @@ int udpserver(int argc, char *argv[])
         strncpy(port_str, argv[0], sizeof(port_str));
         port_str[sizeof(port_str)-1] = 0;
         host_str[0] = 0;
+        argv++;
+        argc--;
     }
     else
     {
