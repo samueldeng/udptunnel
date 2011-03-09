@@ -30,7 +30,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#endif /*WIN32*/
+#endif /* ~WIN32 */
 
 #include "socket.h"
 #include "common.h"
@@ -62,7 +62,7 @@ socket_t *sock_create(char *host, char *port, int ipver, int sock_type,
     if(!sock)
         return NULL;
 
-    paddr = (struct sockaddr *)&sock->addr;
+    paddr = SOCK_PADDR(sock);
     sock->fd = -1;
 
     switch(sock_type)
@@ -78,9 +78,12 @@ socket_t *sock_create(char *host, char *port, int ipver, int sock_type,
     }
 
     /* If both host and port are null, then don't create any socket or
-       address */
+       address, but still set the AF. */
     if(host == NULL && port == NULL)
+    {
+        sock->addr.ss_family = (ipver == SOCK_IPV6) ? AF_INET6 : AF_INET;
         goto done;
+    }
     
     /* Setup type of address to get */
     memset(&hints, 0, sizeof(hints));
@@ -129,15 +132,19 @@ socket_t *sock_copy(socket_t *sock)
 }
 
 /*
- *
+ * If the socket is a server, start listening. If it's a client, connect to
+ * to destination specified in sock_create(). Returns -1 on error or -2 if
+ * the sockect is already connected.
  */
 int sock_connect(socket_t *sock, int is_serv)
 {
     struct sockaddr *paddr;
     int ret;
 
-    ERROR_GOTO(sock->fd != -1, "Socket already connected.", error);    
-    paddr = SOCK_ADDR(sock);
+    if(sock->fd != -1)
+        return -2;
+        
+    paddr = SOCK_PADDR(sock);
     
     /* Create socket file descriptor */
     sock->fd = socket(paddr->sa_family, sock->type, 0);
@@ -186,7 +193,7 @@ socket_t *sock_accept(socket_t *serv)
 
     client->type = serv->type;
     client->addr_len = sizeof(struct sockaddr_storage);
-    client->fd = accept(serv->fd, SOCK_ADDR(client), &client->addr_len);
+    client->fd = accept(serv->fd, SOCK_PADDR(client), &client->addr_len);
     PERROR_GOTO(SOCK_FD(client) < 0, "accept", error);
         
     return client;
@@ -243,7 +250,7 @@ int sock_ipaddr_cmp(socket_t *s1, socket_t *s2)
     int len;
     
     if(s1->addr.ss_family != s2->addr.ss_family)
-        return 0; /* ? */
+        return s1->addr.ss_family - s2->addr.ss_family; /* ? */
 
     switch(s1->addr.ss_family)
     {
@@ -251,11 +258,13 @@ int sock_ipaddr_cmp(socket_t *s1, socket_t *s2)
             a1 = (char *)(&SIN(&s1->addr)->sin_addr);
             a2 = (char *)(&SIN(&s2->addr)->sin_addr);
             len = 4; /* 32 bits */
+            break;
             
         case AF_INET6:
             a1 = (char *)(&SIN6(&s1->addr)->sin6_addr);
             a2 = (char *)(&SIN6(&s2->addr)->sin6_addr);
             len = 16; /* 128 bits */
+            break;
 
         default:
             return 0; /* ? */
@@ -273,7 +282,7 @@ int sock_port_cmp(socket_t *s1, socket_t *s2)
     uint16_t p2;
 
     if(s1->addr.ss_family != s2->addr.ss_family)
-        return 0; /* ? */
+        return s1->addr.ss_family - s2->addr.ss_family; /* ? */
     
     switch(s1->addr.ss_family)
     {
@@ -293,6 +302,28 @@ int sock_port_cmp(socket_t *s1, socket_t *s2)
 }
 
 /*
+ * Returns 1 if the address in the socket is 0.0.0.0 or ::, and 0 if not.
+ */
+int sock_isaddrany(socket_t *s)
+{
+    struct in6_addr zaddr = IN6ADDR_ANY_INIT;
+
+    switch(s->addr.ss_family)
+    {
+        case AF_INET:
+            return (SIN(&s->addr)->sin_addr.s_addr == INADDR_ANY) ? 1 : 0;
+
+        case AF_INET6:
+            if(memcmp(&SIN6(&s->addr)->sin6_addr, &zaddr, sizeof(zaddr)) == 0)
+                return 1;
+            else
+                return 0;
+
+        default:
+            return 1;
+    }
+}
+/*
  * Gets the string representation of the IP address and port from addr. Will
  * store result in buf, which len must be at least INET6_ADDRLEN + 6. Returns a
  * pointer to buf. String will be in the form of "ip_address:port".
@@ -300,9 +331,12 @@ int sock_port_cmp(socket_t *s1, socket_t *s2)
 #ifdef WIN32
 char *sock_get_str(socket_t *s, char *buf, int len)
 {
-    /* WSAAddressToString() gets the port also, so just call get_addrstr()
-       here because it will have the same output */
-    return sock_get_addrstr(s, buf, len);
+    DWORD plen = len;
+
+    if(WSAAddressToString(SOCK_PADDR(s), SOCK_LEN(s), NULL, buf, &plen) != 0)
+        return NULL;
+
+    return buf;
 }
 #else
 char *sock_get_str(socket_t *s, char *buf, int len)
@@ -314,13 +348,13 @@ char *sock_get_str(socket_t *s, char *buf, int len)
     switch(s->addr.ss_family)
     {
         case AF_INET:
-            src_addr = (void *)&((struct sockaddr_in *)&s->addr)->sin_addr;
-            port = ntohs(((struct sockaddr_in *)&s->addr)->sin_port);
+            src_addr = (void *)&SIN(&s->addr)->sin_addr;
+            port = ntohs(SIN(&s->addr)->sin_port);
             break;
 
         case AF_INET6:
-            src_addr = (void *)&((struct sockaddr_in6 *)&s->addr)->sin6_addr;
-            port = ntohs(((struct sockaddr_in6 *)&s->addr)->sin6_port);
+            src_addr = (void *)&SIN6(&s->addr)->sin6_addr;
+            port = ntohs(SIN6(&s->addr)->sin6_port);
             break;
             
         default:
@@ -345,17 +379,40 @@ char *sock_get_str(socket_t *s, char *buf, int len)
 #ifdef WIN32
 char *sock_get_addrstr(socket_t *s, char *buf, int len)
 {
-    DWORD plen = len;
-
-    if(WSAAddressToString((struct sockaddr *)&s->addr, s->addr_len,
-                          NULL, buf, &plen) != 0)
-    {
+    socket_t *copy = NULL;
+    
+    if((copy = sock_copy(s)) == NULL)
         return NULL;
+    
+    switch(copy->addr.ss_family)
+    {
+        case AF_INET:
+            SIN(&copy->addr)->sin_port = 0;
+            break;
+
+        case AF_INET6:
+            SIN6(&copy->addr)->sin6_port = 0;
+            break;
+
+        default:
+            return NULL;
     }
 
+    /* Calls to this will put the port in the string, so seting the port to 0
+     * will just return the IP address. */
+    if(sock_get_str(copy, buf, len) == NULL)
+        goto error;
+
+    free(copy);    
     return buf;
+
+  error:
+    if(copy)
+        free(copy);
+    
+    return NULL;
 }
-#else
+#else /*~WIN32*/
 char *sock_get_addrstr(socket_t *s, char *buf, int len)
 {
     void *src_addr;
@@ -363,11 +420,11 @@ char *sock_get_addrstr(socket_t *s, char *buf, int len)
     switch(s->addr.ss_family)
     {
         case AF_INET:
-            src_addr = (void *)&((struct sockaddr_in *)&s->addr)->sin_addr;
+            src_addr = (void *)&SIN(&s->addr)->sin_addr;
             break;
 
         case AF_INET6:
-            src_addr = (void *)&((struct sockaddr_in6 *)&s->addr)->sin6_addr;
+            src_addr = (void *)&SIN6(&s->addr)->sin6_addr;
             break;
             
         default:
@@ -422,7 +479,7 @@ int sock_recv(socket_t *sock, socket_t *from, char *data, int len)
             from->fd = sock->fd;
             from->addr_len = sock->addr_len;
             bytes_recv = recvfrom(from->fd, data, len, 0,
-                                  SOCK_ADDR(from), &from->addr_len);
+                                  SOCK_PADDR(from), &SOCK_LEN(from));
             break;
     }
     
@@ -468,7 +525,7 @@ int sock_send(socket_t *to, char *data, int len)
 
         case SOCK_DGRAM:
             bytes_sent = sendto(to->fd, data, len, 0,
-                                SOCK_ADDR(to), to->addr_len);
+                                SOCK_PADDR(to), to->addr_len);
             PERROR_GOTO(bytes_sent < 0, "sendto", error);
             break;
 
@@ -498,9 +555,19 @@ int sock_send(socket_t *to, char *data, int len)
 int isipaddr(char *ip, int ipver)
 {
     char addr[sizeof(struct in6_addr)];
+    int len;
+    int af_type;
 
-    if(inet_pton(((ipver == SOCK_IPV6) ? AF_INET6 : AF_INET), ip, addr) == 1)
+    af_type = (ipver == SOCK_IPV6) ? AF_INET6 : AF_INET;
+    len = sizeof(addr);
+    
+#ifdef WIN32
+    if(WSAStringToAddress(ip, af_type, NULL, PADDR(addr), &len) == 0)
         return 1;
+#else /*~WIN32*/    
+    if(inet_pton(af_type, ip, addr) == 1)
+        return 1;
+#endif /*WIN32*/
 
     return 0;
 }

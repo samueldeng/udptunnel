@@ -12,5 +12,3 @@
 - Allow to run using IPv6 and IPv4 at the same time (e.g. IPv4 on the outter
   connections and IPv6 for the tunnel, or visa versa).
 - Make sure can use ipv4-mapped, like ffff:1.2.3.4
-- Make new changes compat w/ windows (inet_pton)
-- socket.c: make sock_get_addrstr on windows the same

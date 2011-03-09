@@ -21,11 +21,11 @@
 CC=cl.exe
 CFLAGS=/nologo /DWIN32 /c
 LDFLAGS=
-LIBS="c:\Program Files\Microsoft SDKs\Windows\v6.0A\lib\WS2_32.Lib"
+LIBS="C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\Lib\WS2_32.Lib"
 
 all: udptunnel.exe
 
-OBJS=socket.obj message.obj client.obj list.obj destination.obj udpserver.obj udpclient.obj udptunnel.obj xgetopt.obj gettimeofday.obj
+OBJS=socket.obj message.obj client.obj list.obj acl.obj udpserver.obj udpclient.obj udptunnel.obj xgetopt.obj gettimeofday.obj
 udptunnel.exe: $(OBJS)
 	link.exe /NOLOGO /OUT:udptunnel.exe $(LDFLAGS) $(OBJS) $(LIBS)
 
@@ -37,8 +37,8 @@ client.obj: client.c client.h common.h
 	$(CC) $(CFLAGS) client.c
 message.obj: message.c message.h common.h
 	$(CC) $(CFLAGS) message.c
-destination.obj: destination.c destination.h
-	$(CC) $(CFLAGS) destination.c
+acl.obj: acl.c acl.h common.h
+	$(CC) $(CFLAGS) acl.c
 udpclient.obj: udpclient.c list.h socket.h client.h message.h common.h
 	$(CC) $(CFLAGS) udpclient.c
 udpserver.obj: udpserver.c list.h socket.h client.h message.h common.h
