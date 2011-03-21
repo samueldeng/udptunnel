@@ -64,6 +64,12 @@ struct msg_hdr
 
 typedef struct msg_hdr msg_hdr_t;
 
+typedef struct data_buf
+{
+    char buf[MSG_MAX_LEN];
+    int len;
+} data_buf_t;
+
 int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
                  char *data, int data_len);
 int msg_send_hello(socket_t *to, char *host, char *port, uint16_t req_id);
