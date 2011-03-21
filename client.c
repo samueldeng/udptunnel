@@ -54,6 +54,7 @@ client_t *client_create(uint16_t id, socket_t *tcp_sock, socket_t *udp_sock,
     c->id = id;
     c->tcp_sock = sock_copy(tcp_sock);
     c->udp_sock = sock_copy(udp_sock);
+    c->tcp2udp_q = list_create(sizeof(data_buf_t), NULL, NULL, NULL, 0);
     c->udp2tcp_state = CLIENT_WAIT_HELLO;
     c->tcp2udp_state = CLIENT_WAIT_DATA0;
     c->connected = connected;
@@ -62,6 +63,9 @@ client_t *client_create(uint16_t id, socket_t *tcp_sock, socket_t *udp_sock,
     timerclear(&c->tcp2udp_timeout);
     c->resend_count = 0;
 
+    if(!c->tcp_sock || !c->udp_sock || !c->tcp2udp_q)
+        goto error;
+    
     return c;
     
   error:
@@ -71,6 +75,8 @@ client_t *client_create(uint16_t id, socket_t *tcp_sock, socket_t *udp_sock,
             sock_free(c->tcp_sock);
         if(c->udp_sock)
             sock_free(c->udp_sock);
+        if(c->tcp2udp_q)
+            list_free(c->tcp2udp_q);
         free(c);
     }
 
@@ -87,15 +93,33 @@ client_t *client_copy(client_t *dst, client_t *src, size_t len)
 
     memcpy(dst, src, sizeof(*src));
 
+    dst->tcp_sock = NULL;
+    dst->udp_sock = NULL;
+    dst->tcp2udp_q = NULL;
+    
     dst->tcp_sock = sock_copy(src->tcp_sock);
     if(!dst->tcp_sock)
-        return NULL;
+        goto error;
 
     dst->udp_sock = sock_copy(src->udp_sock);
     if(!dst->udp_sock)
-        return NULL;
+        goto error;
 
+    dst->tcp2udp_q = list_copy(src->tcp2udp_q);
+    if(!dst->tcp2udp_q)
+        goto error;
+    
     return dst;
+
+  error:
+    if(dst->tcp_sock)
+        sock_free(dst->tcp_sock);
+    if(dst->udp_sock)
+        sock_free(dst->udp_sock);
+    if(dst->tcp2udp_q)
+        list_free(dst->tcp2udp_q);
+
+    return NULL;
 }
 
 /*
@@ -153,6 +177,7 @@ void client_free(client_t *c)
     {
         sock_free(c->tcp_sock);
         sock_free(c->udp_sock);
+        list_free(c->tcp2udp_q);
         free(c);
     }
 }
@@ -250,21 +275,16 @@ int client_send_tcp_data(client_t *client)
 int client_recv_tcp_data(client_t *client)
 {
     int ret;
-
-    /* Don't read the tcp data yet if waiting for an ack or the hello */
-    if(client->tcp2udp_state == CLIENT_WAIT_ACK0 ||
-       client->tcp2udp_state == CLIENT_WAIT_ACK1 ||
-       client->udp2tcp_state == CLIENT_WAIT_HELLO)
-        return 1;
+    data_buf_t buf;
     
-    ret = sock_recv(client->tcp_sock, NULL, client->tcp2udp,
-                    sizeof(client->tcp2udp));
+    ret = sock_recv(client->tcp_sock, NULL, buf.buf, sizeof(buf.buf));
     if(ret < 0)
         return -1;
     if(ret == 0)
         return -2;
 
-    client->tcp2udp_len = ret;
+    buf.len = ret;
+    list_add(client->tcp2udp_q, &buf, 1);
 
     return 0;
 }
@@ -275,11 +295,21 @@ int client_recv_tcp_data(client_t *client)
  */
 int client_send_udp_data(client_t *client)
 {
+    data_buf_t *buf;
     uint8_t msg_type;
     int ret;
 
+    if(LIST_LEN(client->tcp2udp_q) == 0)
+        return 0;
+    
     if(client->resend_count >= CLIENT_MAX_RESEND)
         return -2;
+
+    /* Don't sebd the tcp data yet if waiting for an ack or the hello */
+    if(client->tcp2udp_state == CLIENT_WAIT_ACK0 ||
+       client->tcp2udp_state == CLIENT_WAIT_ACK1 ||
+       client->udp2tcp_state == CLIENT_WAIT_HELLO)
+        return 1;
 
     /* Set the message type it is sending. If the client is in the WAIT_ACK
        state, then it will send the same type of data again (since this would
@@ -299,9 +329,10 @@ int client_send_udp_data(client_t *client)
         default:
             return -1;
     }
-    
+
+    buf = list_get_at(client->tcp2udp_q, 0);
     ret = msg_send_msg(client->udp_sock, client->id, msg_type,
-                       client->tcp2udp, client->tcp2udp_len);
+                       buf->buf, buf->len);
     if(ret < 0)
         return ret;
 
@@ -317,12 +348,14 @@ int client_send_udp_data(client_t *client)
 
 /*
  * Notifies the client that it got an ACK to change the internal state to
- * wait for data. Returns 0 if ok or -1 if something weird happened.
+ * wait for data and remove buffer packet at head of the queue. Returns 0 if
+ * ok or -1 if something weird happened.
  */
 int client_got_ack(client_t *client, uint8_t ack_type)
 {
     if(ack_type == MSG_TYPE_ACK0 && client->tcp2udp_state == CLIENT_WAIT_ACK0)
     {
+        list_delete_at(client->tcp2udp_q, 0);
         client->tcp2udp_state = CLIENT_WAIT_DATA1;
         client->resend_count = 0;
         return 0;
@@ -330,6 +363,7 @@ int client_got_ack(client_t *client, uint8_t ack_type)
 
     if(ack_type == MSG_TYPE_ACK1 && client->tcp2udp_state == CLIENT_WAIT_ACK1)
     {
+        list_delete_at(client->tcp2udp_q, 0);
         client->tcp2udp_state = CLIENT_WAIT_DATA0;
         client->resend_count = 0;
         return 0;

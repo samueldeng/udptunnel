@@ -244,12 +244,12 @@ int udpclient(int argc, char *argv[])
         }
 
         /* Check if data is ready from any of the clients */
-        for(i = 0; i < LIST_LEN(clients) && num_fds > 0; i++)
+        for(i = 0; i < LIST_LEN(clients); i++)
         {
             client = list_get_at(clients, i);
 
             /* Check for UDP data */
-            if(client_udp_fd_isset(client, &read_fds))
+            if(num_fds > 0 && client_udp_fd_isset(client, &read_fds))
             {
                 num_fds--;
 
@@ -268,29 +268,27 @@ int udpclient(int argc, char *argv[])
             }
 
             /* Check for TCP data */
-            if(client_tcp_fd_isset(client, &read_fds))
+            if(num_fds > 0 && client_tcp_fd_isset(client, &read_fds))
             {
-                num_fds--;
-
                 ret = client_recv_tcp_data(client);
-                if(ret == 0)
-                    ret = client_send_udp_data(client);
-#if 0 /* if udptunnel is taking up 100% of cpu, try including this */
-                else if(ret == 1)
-#ifdef WIN32
-                    _sleep(1);
-#else
-                    usleep(1000); /* Quick hack so doesn't use 100% of CPU if
-                                     data wasn't ready yet (waiting for ack) */
-#endif /*WIN32*/
-#endif /*0*/          
-                
                 if(ret < 0)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
                                                  &client_fds);
                     i--;
+                    continue;
                 }
+
+                num_fds--;
+            }
+
+            /* send any TCP data that was ready */
+            ret = client_send_udp_data(client);
+            if(ret < 0)
+            {
+                disconnect_and_remove_client(CLIENT_ID(client), clients,
+                                             &client_fds);
+                i--;
             }
         }
     }

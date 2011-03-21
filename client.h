@@ -30,6 +30,7 @@
 #include "common.h"
 #include "socket.h"
 #include "message.h"
+#include "list.h"
 
 #define CLIENT_TIMEOUT 1 /* in seconds */
 #define CLIENT_MAX_RESEND 10
@@ -54,8 +55,7 @@ typedef struct client
     int udp2tcp_state;
 
     /* For data going from TCP connection to UDP tunnel */
-    char tcp2udp[MSG_MAX_LEN];
-    int tcp2udp_len;
+    list_t *tcp2udp_q;
     int tcp2udp_state;
     struct timeval tcp2udp_timeout;
     int resend_count;
