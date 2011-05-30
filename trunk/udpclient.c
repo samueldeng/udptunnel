@@ -30,7 +30,7 @@
 #include <sys/time.h>
 #include <sys/select.h>
 #else
-#include "gettimeofday.h"
+#include "helpers/winhelpers.h"
 #endif
 
 #include "common.h"

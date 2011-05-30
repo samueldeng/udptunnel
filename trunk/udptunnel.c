@@ -25,7 +25,7 @@
 #ifndef WIN32
 #include <unistd.h>
 #else
-#include "xgetopt.h"
+#include "helpers/winhelpers.h"
 #endif
 
 #include "common.h"
