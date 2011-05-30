@@ -19,9 +19,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Uncomment appropriate one for the system this is compiling for
-OS=LINUX
+#OS=LINUX
 #OS=SOLARIS
-#OS=CYGWIN
+OS=CYGWIN
 
 # Uncomment to build 32-bit binary (if on 64-bit system)
 #M32=-m32
@@ -66,4 +66,4 @@ ifeq (${OS}, CYGWIN)
 else
 	rm -f udptunnel
 endif
-	rm -f *~ *.o
+	rm -f *~ *.o helpers/*~

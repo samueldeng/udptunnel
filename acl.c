@@ -27,11 +27,11 @@
 #include "socket.h"
 #include "acl.h"
 
-extern int debug_level;
-
 #ifdef WIN32
-char *strtok_r(char *s, const char *delim, char **save_ptr);
+#include "helpers/winhelpers.h"
 #endif /*WIN32*/
+
+extern int debug_level;
     
 /*
  * Creates an ACL entry given the line of the following format:
@@ -103,7 +103,7 @@ acl_t *acl_create(char *acl_entry, int ipver)
         else if(strcmp(param, "a") == 0)
         {
             for(i = 0; i < strlen(arg); i++)
-                arg[i] = tolower(arg[i]);
+                arg[i] = tolower((int)arg[i]);
 
             if(strcmp(arg, "allow") == 0)
                 acl->action = ACL_ACTION_ALLOW;
@@ -240,43 +240,3 @@ void acl_print(acl_t *acl)
             break;
     }
 }
-
-/*
- * strtok_r code directly from glibc.git /string/strtok_r.c since windows
- * doesn't have it.
- */
-#ifdef WIN32
-char *strtok_r(char *s, const char *delim, char **save_ptr)
-{
-    char *token;
-    
-    if(s == NULL)
-        s = *save_ptr;
-    
-    /* Scan leading delimiters.  */
-    s += strspn(s, delim);
-    if(*s == '\0')
-    {
-        *save_ptr = s;
-        return NULL;
-    }
-    
-    /* Find the end of the token.  */
-    token = s;
-    s = strpbrk(token, delim);
-    
-    if(s == NULL)
-    {
-        /* This token finishes the string.  */
-        *save_ptr = strchr(token, '\0');
-    }
-    else
-    {
-        /* Terminate the token and make *SAVE_PTR point past it.  */
-        *s = '\0';
-        *save_ptr = s + 1;
-    }
-    
-    return token;
-}
-#endif /* WIN32 */

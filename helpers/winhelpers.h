@@ -1,8 +1,28 @@
-/*
- * From http://www.openasthra.com/c-tidbits/gettimeofday-function-for-windows/
- */
+#ifndef WINHELPERS_H
+#define WINHELPERS_H
+
+/*********************************************************************
+ * strtok_r
+ *********************************************************************/
+
+char *strtok_r(char *s, const char *delim, char **save_ptr);
+
+
+/*********************************************************************
+ * xgetopt
+ *********************************************************************/
+
+extern int optind, opterr;
+extern char *optarg;
+
+int getopt(int argc, char *argv[], char *optstring);
+
+
+/*********************************************************************
+ * gettimeofday
+ *********************************************************************/
+
 #include <time.h>
-//#include <windows.h>
 #include <winsock2.h>
 
 #if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
@@ -29,3 +49,5 @@ int gettimeofday(struct timeval *tv, struct timezone *tz);
             (result)->tv_usec -= 1000000;                                     \
         }                                                                     \
     } while (0)
+
+#endif /*WINHELPERS_H*/

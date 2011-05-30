@@ -25,7 +25,9 @@ LIBS="C:\Program Files (x86)\Microsoft SDKs\Windows\v7.0A\Lib\WS2_32.Lib"
 
 all: udptunnel.exe
 
-OBJS=socket.obj message.obj client.obj list.obj acl.obj udpserver.obj udpclient.obj udptunnel.obj xgetopt.obj gettimeofday.obj
+OBJS=socket.obj message.obj client.obj list.obj acl.obj udpserver.obj    \
+	udpclient.obj udptunnel.obj xgetopt.obj gettimeofday.obj \
+	strtok_r.obj
 udptunnel.exe: $(OBJS)
 	link.exe /NOLOGO /OUT:udptunnel.exe $(LDFLAGS) $(OBJS) $(LIBS)
 
@@ -45,10 +47,12 @@ udpserver.obj: udpserver.c list.h socket.h client.h message.h common.h
 	$(CC) $(CFLAGS) udpserver.c
 udptunnel.obj: udptunnel.c common.h
 	$(CC) $(CFLAGS) udptunnel.c
-xgetopt.obj: xgetopt.c xgetopt.h
-	$(CC) $(CFLAGS) xgetopt.c
-gettimeofday.obj: gettimeofday.c gettimeofday.h
-	$(CC) $(CFLAGS) gettimeofday.c
+xgetopt.obj: helpers/xgetopt.c
+	$(CC) $(CFLAGS) helpers/xgetopt.c
+gettimeofday.obj: helpers/gettimeofday.c
+	$(CC) $(CFLAGS) helpers/gettimeofday.c
+strtok_r.obj: helpers/strtok_r.c
+	$(CC) $(CFLAGS) helpers/strtok_r.c
 
 clean:
 	del *.obj udptunnel.exe

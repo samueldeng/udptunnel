@@ -33,7 +33,7 @@
 #ifdef WIN32
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
+typedef unsigned long uint32_t;
 #endif
 
 /* cl.exe has a different 'inline' keyword for some dumb reason */
@@ -81,7 +81,7 @@ static _inline_ int isnum(char *s)
 {
     for(; *s != '\0'; s++)
     {
-        if(!isdigit(*s))
+        if(!isdigit((int)*s))
             return 0;
     }
 

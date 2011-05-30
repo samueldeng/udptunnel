@@ -42,7 +42,6 @@ int msg_send_msg(socket_t *to, uint16_t client_id, uint8_t type,
 {
     char buf[MSG_MAX_LEN + sizeof(msg_hdr_t)];
     int len; /* length for entire packet */
-    //uint16_t tmp_id;
 
     if(data_len > MSG_MAX_LEN)
         return -1;
