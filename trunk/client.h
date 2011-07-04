@@ -47,6 +47,7 @@ typedef struct client
     socket_t *tcp_sock; /* Socket for connection to TCP server */
     socket_t *udp_sock; /* Socket to hold address from UDP client */
     int connected;
+    int to_disconnect;
     struct timeval keepalive;
 
     /* For data going from UDP tunnel to TCP connection */
@@ -113,15 +114,12 @@ static _inline_ void client_add_udp_fd_to_set(client_t *c, fd_set *set)
 
 static _inline_ int client_tcp_fd_isset(client_t *c, fd_set *set)
 {
-    return SOCK_FD(c->tcp_sock) >= 0 ?
-        FD_ISSET(SOCK_FD(c->tcp_sock), set) : 0;
+    return SOCK_FD(c->tcp_sock) >= 0 ? FD_ISSET(SOCK_FD(c->tcp_sock), set) : 0;
 }
 
 static _inline_ int client_udp_fd_isset(client_t *c, fd_set *set)
 {
-    return SOCK_FD(c->udp_sock) >= 0 ?
-        FD_ISSET(SOCK_FD(c->udp_sock), set) : 0;
-    
+    return SOCK_FD(c->udp_sock) >= 0 ? FD_ISSET(SOCK_FD(c->udp_sock), set) : 0;
 }
 
 static _inline_ void client_remove_tcp_fd_from_set(client_t *c, fd_set *set)
@@ -134,6 +132,16 @@ static _inline_ void client_remove_udp_fd_from_set(client_t *c, fd_set *set)
 {
     if(SOCK_FD(c->udp_sock) >= 0)
         FD_CLR(SOCK_FD(c->udp_sock), set);
+}
+
+static _inline_ void client_mark_to_disconnect(client_t *c)
+{
+    c->to_disconnect = 1;
+}
+
+static _inline_ int client_ready_to_disconnect(client_t *c)
+{
+    return (c->to_disconnect == 1 && LIST_LEN(c->tcp2udp_q) == 0);
 }
 
 #endif /* CLIENT_H */
