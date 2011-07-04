@@ -48,7 +48,7 @@ static uint16_t next_req_id;
 static int handle_message(client_t *c, uint16_t id, uint8_t msg_type,
                           char *data, int data_len);
 static void disconnect_and_remove_client(uint16_t id, list_t *clients,
-                                         fd_set *fds);
+                                         fd_set *fds, int full_disconnect);
 static void signal_handler(int sig);
 
 int udpclient(int argc, char *argv[])
@@ -150,7 +150,7 @@ int udpclient(int argc, char *argv[])
                 if(ret == -2)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
-                                                 &client_fds);
+                                                 &client_fds, 1);
                     i--;
                     continue;
                 }
@@ -159,7 +159,7 @@ int udpclient(int argc, char *argv[])
                 if(ret == -2)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
-                                                 &client_fds);
+                                                 &client_fds, 1);
                     i--;
                 }
             }
@@ -227,10 +227,11 @@ int udpclient(int argc, char *argv[])
                 if(ret == 0)
                     ret = handle_message(client, tmp_id, tmp_type,
                                          data, tmp_len);
+
                 if(ret < 0)
                 {
                     disconnect_and_remove_client(tmp_req_id, conn_clients,
-                                                 &client_fds);
+                                                 &client_fds, 1);
                     i--;
                 }
                 else
@@ -261,7 +262,7 @@ int udpclient(int argc, char *argv[])
                 if(ret < 0)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
-                                                 &client_fds);
+                                                 &client_fds, 1);
                     i--;
                     continue; /* Don't go to check the TCP connection */
                 }
@@ -271,12 +272,18 @@ int udpclient(int argc, char *argv[])
             if(num_fds > 0 && client_tcp_fd_isset(client, &read_fds))
             {
                 ret = client_recv_tcp_data(client);
-                if(ret < 0)
+                if(ret == -1)
                 {
                     disconnect_and_remove_client(CLIENT_ID(client), clients,
-                                                 &client_fds);
+                                                 &client_fds, 1);
                     i--;
                     continue;
+                }
+                else if(ret == -2)
+                {
+                    client_mark_to_disconnect(client);
+                    disconnect_and_remove_client(CLIENT_ID(client),
+                                                 clients, &client_fds, 0);
                 }
 
                 num_fds--;
@@ -287,7 +294,21 @@ int udpclient(int argc, char *argv[])
             if(ret < 0)
             {
                 disconnect_and_remove_client(CLIENT_ID(client), clients,
-                                             &client_fds);
+                                             &client_fds, 1);
+                i--;
+            }
+        }
+
+        /* Finally, send any udp data that's still in the queue */
+        for(i = 0; i < LIST_LEN(clients); i++)
+        {
+            client = list_get_at(clients, i);
+            ret = client_send_udp_data(client);
+
+            if(ret < 0 || client_ready_to_disconnect(client))
+            {
+                disconnect_and_remove_client(CLIENT_ID(client), clients,
+                                             &client_fds, 1);
                 i--;
             }
         }
@@ -308,6 +329,8 @@ int udpclient(int argc, char *argv[])
     }
     if(clients)
         list_free(clients);
+    if(conn_clients)
+        list_free(conn_clients);
     if(debug_level >= DEBUG_LEVEL1)
         printf("Goodbye.\n");
     return 0;
@@ -317,7 +340,8 @@ int udpclient(int argc, char *argv[])
  * Closes the TCP and UDP connections for the client and remove its stuff from
  * the lists.
  */
-void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
+void disconnect_and_remove_client(uint16_t id, list_t *clients,
+                                  fd_set *fds, int full_disconnect)
 {
     client_t *c;
 
@@ -325,16 +349,20 @@ void disconnect_and_remove_client(uint16_t id, list_t *clients, fd_set *fds)
     if(!c)
         return;
 
-    client_send_goodbye(c);
-
-    if(debug_level >= DEBUG_LEVEL1)
-        printf("Client %d disconnected.\n", CLIENT_ID(c));
-    
-    client_remove_udp_fd_from_set(c, fds);
     client_remove_tcp_fd_from_set(c, fds);
     client_disconnect_tcp(c);
-    client_disconnect_udp(c);
-    list_delete(clients, &id);
+
+    if(full_disconnect)
+    {
+        client_send_goodbye(c);
+
+        if(debug_level >= DEBUG_LEVEL1)
+            printf("Client %d disconnected.\n", CLIENT_ID(c));
+
+        client_remove_udp_fd_from_set(c, fds);
+        client_disconnect_udp(c);
+        list_delete(clients, &id);
+    }
 }
 
 /*

@@ -175,6 +175,12 @@ void client_free(client_t *c)
 {
     if(c)
     {
+        if(debug_level >= DEBUG_LEVEL2)
+        {
+            printf("Freeing client id %d\n", c->id);
+            printf("  q cnt left: %d\n", LIST_LEN(c->tcp2udp_q));
+        }
+        
         sock_free(c->tcp_sock);
         sock_free(c->udp_sock);
         list_free(c->tcp2udp_q);
@@ -305,7 +311,7 @@ int client_send_udp_data(client_t *client)
     if(client->resend_count >= CLIENT_MAX_RESEND)
         return -2;
 
-    /* Don't sebd the tcp data yet if waiting for an ack or the hello */
+    /* Don't send the tcp data yet if waiting for an ack or the hello */
     if(client->tcp2udp_state == CLIENT_WAIT_ACK0 ||
        client->tcp2udp_state == CLIENT_WAIT_ACK1 ||
        client->udp2tcp_state == CLIENT_WAIT_HELLO)
